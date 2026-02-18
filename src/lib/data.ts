@@ -20,12 +20,10 @@ export const updateProfile = async (userId: string, updates: Partial<Profile>) =
 };
 
 export const createMember = async (username: string, displayName?: string) => {
-    // Basic UUID generation for profiles if not using Auth
-    const tempId = crypto.randomUUID();
+    // We let the database generate the ID via gen_random_uuid()
     const { data, error } = await supabase
         .from('profiles')
         .insert([{
-            id: tempId,
             username,
             display_name: displayName || username,
             role: 'member',

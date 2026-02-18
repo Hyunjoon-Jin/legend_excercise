@@ -244,7 +244,7 @@ export default function AdminPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="hidden">
                                     <div className="space-y-2">
                                         <Label className="text-xs font-bold text-slate-500">운동 종류</Label>
                                         <Select onValueChange={(v) => setDateLogForm({ ...dateLogForm, type: v as any })} value={dateLogForm.type}>
@@ -269,6 +269,9 @@ export default function AdminPage() {
                                             className="h-12 rounded-xl bg-slate-50 border-none"
                                         />
                                     </div>
+                                </div>
+                                <div className="text-center py-1">
+                                    <p className="text-[10px] text-slate-400">기본값(헬스/60분)으로 자동 등록됩니다.</p>
                                 </div>
                                 <Button
                                     onClick={handleRegisterByDate}
@@ -335,7 +338,7 @@ export default function AdminPage() {
                                                     {format(memberSelectedDate, "MM월 dd일")} 기록 설정
                                                 </span>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="hidden">
                                                 <Select onValueChange={(v) => setMemberLogForm({ ...memberLogForm, type: v as any })} value={memberLogForm.type}>
                                                     <SelectTrigger className="h-11 rounded-xl bg-white border-slate-100">
                                                         <SelectValue />
@@ -354,6 +357,9 @@ export default function AdminPage() {
                                                     onChange={(e) => setMemberLogForm({ ...memberLogForm, duration: e.target.value })}
                                                     className="h-11 rounded-xl bg-white border-slate-100"
                                                 />
+                                            </div>
+                                            <div className="text-center py-1">
+                                                <p className="text-[10px] text-slate-400">기본값(헬스/60분)으로 자동 등록됩니다.</p>
                                             </div>
                                             <Button
                                                 onClick={handleRegisterByMember}

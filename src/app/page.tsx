@@ -104,7 +104,7 @@ export default function DashboardPage() {
                 </span>
               )}
             </button>
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-muted-foreground gap-1 p-0 h-auto font-medium">
+            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-muted-foreground font-bold hover:bg-slate-100 rounded-full px-3">
               로그아웃
             </Button>
             {user.role === 'admin' && (
@@ -202,7 +202,12 @@ export default function DashboardPage() {
               <Trophy size={18} className="text-accent" />
               실시간 랭킹 {activeSeason && <span className="text-xs font-normal text-slate-400">({activeSeason.name})</span>}
             </h3>
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-auto p-0 gap-1 hover:bg-transparent">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground h-auto p-0 gap-1 hover:bg-transparent"
+              onClick={() => router.push("/rankings")}
+            >
               전체보기 <ChevronRight size={14} />
             </Button>
           </div>
@@ -255,7 +260,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h4 className="font-bold text-sm">운동방 규정 확인</h4>
-                  <p className="text-xs text-white/60">Ver 4.1 공식 규정집</p>
+                  <p className="text-xs text-white/60">Ver 4.2 공식 규정집</p>
                 </div>
               </div>
               <ChevronRight size={18} className="text-white/40" />
@@ -284,15 +289,24 @@ export default function DashboardPage() {
           <PlusCircle size={22} className="text-accent" />
           <span className="text-[10px] font-bold">인증</span>
         </button>
-        <button className="flex flex-col items-center gap-1 text-slate-400 opacity-50">
+        <button
+          onClick={() => router.push("/calendar")}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
+        >
           <Calendar size={22} />
           <span className="text-[10px]">캘린더</span>
         </button>
-        <button className="flex flex-col items-center gap-1 text-slate-400 opacity-50">
+        <button
+          onClick={() => router.push("/rankings")}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
+        >
           <Trophy size={22} />
           <span className="text-[10px]">랭킹</span>
         </button>
-        <button className="flex flex-col items-center gap-1 text-slate-400 opacity-50">
+        <button
+          onClick={() => router.push("/profile")}
+          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
+        >
           <UserIcon size={22} />
           <span className="text-[10px]">내정보</span>
         </button>
