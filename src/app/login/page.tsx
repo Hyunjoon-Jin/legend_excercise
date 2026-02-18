@@ -59,8 +59,8 @@ export default function LoginPage() {
                 return;
             }
 
-            // 단순 비밀번호 비교 (실제 운영 시에는 보안 처리가 필요함)
-            if (data.password === "0000" || data.password === "1234") {
+            // DB에 저장된 비밀번호 또는 기본 비밀번호(1234) 비교
+            if (data.password === profile.password || data.password === "1234") {
                 login({
                     id: profile.id,
                     username: profile.username,

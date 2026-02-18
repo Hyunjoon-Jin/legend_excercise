@@ -19,6 +19,24 @@ export const updateProfile = async (userId: string, updates: Partial<Profile>) =
     return { data, error };
 };
 
+export const createMember = async (username: string, displayName?: string) => {
+    // Basic UUID generation for profiles if not using Auth
+    const tempId = crypto.randomUUID();
+    const { data, error } = await supabase
+        .from('profiles')
+        .insert([{
+            id: tempId,
+            username,
+            display_name: displayName || username,
+            role: 'member',
+            tier: 'Bronze',
+            password: '1234'
+        }])
+        .select()
+        .single();
+    return { data, error };
+};
+
 // --- Seasons ---
 export const getActiveSeason = async () => {
     const { data, error } = await supabase
@@ -50,7 +68,10 @@ export const getWorkoutLogs = async (seasonId: string) => {
 export const submitWorkoutLog = async (log: Omit<WorkoutLog, 'id' | 'created_at' | 'status' | 'admin_note'>) => {
     const { data, error } = await supabase
         .from('workout_logs')
-        .insert([log])
+        .insert([{
+            ...log,
+            status: log.proof_image_url === 'admin-registered' ? 'approved' : 'pending'
+        }])
         .select()
         .single();
     return { data, error };

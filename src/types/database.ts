@@ -9,6 +9,7 @@ export interface Profile {
     role: UserRole;
     avatar_url?: string;
     tier: string;
+    password?: string;
     created_at: string;
 }
 
@@ -25,6 +26,7 @@ export interface WorkoutLog {
     id: string;
     user_id: string;
     season_id: string;
+    workout_date: string;
     workout_type: WorkoutType;
     duration_minutes: number;
     proof_image_url: string;

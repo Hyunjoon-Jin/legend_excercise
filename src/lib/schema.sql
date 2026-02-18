@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
   avatar_url TEXT,
   tier TEXT DEFAULT 'Bronze',
+  password TEXT DEFAULT '1234',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS workout_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   season_id UUID REFERENCES seasons(id) ON DELETE CASCADE NOT NULL,
+  workout_date DATE DEFAULT CURRENT_DATE NOT NULL,
   workout_type TEXT NOT NULL CHECK (workout_type IN ('running', 'walking', 'gym', 'yoga', 'sports')),
   duration_minutes INTEGER NOT NULL,
   proof_image_url TEXT NOT NULL,
