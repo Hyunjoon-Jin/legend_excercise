@@ -17,7 +17,7 @@ import {
 import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getActiveSeason, submitWorkoutLog, createMember } from "@/lib/data";
-import { Profile, Season } from "@/types/database";
+import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -48,7 +48,9 @@ export default function AdminPage() {
 
     // Workflow 2: By Member
     const [selectedMemberId, setSelectedMemberId] = useState<string>("");
-    const [memberSelectedDate, setMemberSelectedDate] = useState<Date | undefined>(new Date());
+    const [memberLogs, setMemberLogs] = useState<WorkoutLog[]>([]);
+    const [datesToAdd, setDatesToAdd] = useState<Date[]>([]);
+    const [datesToDelete, setDatesToDelete] = useState<string[]>([]); // workout_date strings
     const [memberLogForm, setMemberLogForm] = useState({
         type: "gym" as any,
         duration: "60",
@@ -81,6 +83,24 @@ export default function AdminPage() {
         fetchData();
     }, [isAuthenticated, user, router]);
 
+    // Fetch logs when selected member changes
+    useEffect(() => {
+        if (selectedMemberId && activeSeason) {
+            const fetchMemberLogs = async () => {
+                const { data } = await supabase
+                    .from('workout_logs')
+                    .select('*')
+                    .eq('user_id', selectedMemberId)
+                    .eq('season_id', activeSeason.id)
+                    .eq('status', 'approved');
+                if (data) setMemberLogs(data);
+                setDatesToAdd([]);
+                setDatesToDelete([]);
+            };
+            fetchMemberLogs();
+        }
+    }, [selectedMemberId, activeSeason]);
+
     const handleRegisterByDate = async () => {
         if (!dateLogForm.userId || !activeSeason) {
             alert("회원을 선택해 주세요.");
@@ -109,31 +129,99 @@ export default function AdminPage() {
         }
     };
 
-    const handleRegisterByMember = async () => {
-        if (!selectedMemberId || !memberSelectedDate || !activeSeason) {
-            alert("회원과 날짜를 선택해 주세요.");
+    // Logic to ensure admin profile exists
+    useEffect(() => {
+        if (isAuthenticated && user?.username === "진현준") {
+            const checkAdmin = async () => {
+                const { data: profiles } = await supabase.from('profiles').select('id').eq('username', '진현준');
+                if (profiles && profiles.length === 0) {
+                    await createMember("진현준", "진현준", 'admin');
+                    const { data } = await supabase.from('profiles').select('*').order('username');
+                    if (data) setMembers(data);
+                }
+            };
+            checkAdmin();
+        }
+    }, [isAuthenticated, user]);
+
+    const handleBatchUpdate = async () => {
+        if (!selectedMemberId || !activeSeason) return;
+        if (datesToAdd.length === 0 && datesToDelete.length === 0) {
+            alert("변경할 내용이 없습니다.");
             return;
         }
 
+        const confirmMsg = `${datesToAdd.length}일 추가, ${datesToDelete.length}일 삭제하시겠습니까?`;
+        if (!confirm(confirmMsg)) return;
+
         setIsSubmitting(true);
         try {
-            const { error } = await submitWorkoutLog({
-                user_id: selectedMemberId,
-                season_id: activeSeason.id,
-                workout_date: format(memberSelectedDate, 'yyyy-MM-dd'),
-                workout_type: memberLogForm.type,
-                duration_minutes: parseInt(memberLogForm.duration),
-                proof_image_url: "admin-registered",
-                comment: memberLogForm.comment || "회원별 캘린더 직접 등록",
-            });
+            // 1. Deletions
+            if (datesToDelete.length > 0) {
+                const { error } = await supabase
+                    .from('workout_logs')
+                    .delete()
+                    .eq('user_id', selectedMemberId)
+                    .eq('season_id', activeSeason.id)
+                    .in('workout_date', datesToDelete);
+                if (error) throw error;
+            }
 
-            if (error) throw error;
-            alert("운동 기록이 등록되었습니다.");
-            setMemberSelectedDate(undefined);
+            // 2. Additions
+            if (datesToAdd.length > 0) {
+                const logsToInsert = datesToAdd.map(date => ({
+                    user_id: selectedMemberId,
+                    season_id: activeSeason.id,
+                    workout_date: format(date, 'yyyy-MM-dd'),
+                    workout_type: memberLogForm.type,
+                    duration_minutes: parseInt(memberLogForm.duration),
+                    proof_image_url: "admin-registered",
+                    status: 'approved',
+                    comment: memberLogForm.comment || "관리자 일괄 등록"
+                }));
+
+                const { error } = await supabase.from('workout_logs').insert(logsToInsert);
+                if (error) throw error;
+            }
+
+            alert("기록이 성공적으로 반영되었습니다.");
+
+            // Refresh logs
+            const { data } = await supabase
+                .from('workout_logs')
+                .select('*')
+                .eq('user_id', selectedMemberId)
+                .eq('season_id', activeSeason.id)
+                .eq('status', 'approved');
+            if (data) setMemberLogs(data);
+
+            setDatesToAdd([]);
+            setDatesToDelete([]);
         } catch (err: any) {
-            alert("등록 중 오류: " + err.message);
+            alert("저장 중 오류가 발생했습니다: " + err.message);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const toggleDate = (date: Date) => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const hasLog = memberLogs.some(l => l.workout_date === dateStr);
+
+        if (hasLog) {
+            // Toggle for deletion
+            setDatesToDelete(prev =>
+                prev.includes(dateStr)
+                    ? prev.filter(d => d !== dateStr)
+                    : [...prev, dateStr]
+            );
+        } else {
+            // Toggle for addition
+            setDatesToAdd(prev =>
+                prev.some(d => format(d, 'yyyy-MM-dd') === dateStr)
+                    ? prev.filter(d => format(d, 'yyyy-MM-dd') !== dateStr)
+                    : [...prev, date]
+            );
         }
     };
 
@@ -315,59 +403,54 @@ export default function AdminPage() {
 
                         {selectedMemberId && (
                             <Card className="border-none shadow-sm overflow-hidden bg-white">
-                                <CardHeader className="py-4 border-b border-slate-50">
-                                    <CardTitle className="text-sm font-bold text-slate-700">
-                                        날짜를 클릭하여 등록하세요
+                                <CardHeader className="py-4 border-b border-slate-50 flex flex-row items-center justify-between">
+                                    <CardTitle className="text-sm font-black text-slate-700">
+                                        기록 관리 (클릭하여 추가/삭제)
                                     </CardTitle>
+                                    <div className="flex gap-3 text-[10px] font-bold">
+                                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" />기존</div>
+                                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" />추가</div>
+                                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" />삭제</div>
+                                    </div>
                                 </CardHeader>
                                 <CardContent className="p-0">
                                     <div className="flex justify-center p-2">
                                         <Calendar
                                             mode="single"
-                                            selected={memberSelectedDate}
-                                            onSelect={setMemberSelectedDate}
+                                            selected={undefined}
+                                            onSelect={(date) => date && toggleDate(date)}
                                             className="rounded-md border-none"
+                                            modifiers={{
+                                                hasLog: memberLogs.map(l => new Date(l.workout_date)),
+                                                toAdd: datesToAdd,
+                                                toDelete: datesToDelete.map(d => new Date(d))
+                                            }}
+                                            modifiersClassNames={{
+                                                hasLog: "bg-blue-50 text-blue-600 font-bold border border-blue-100",
+                                                toAdd: "bg-amber-100 text-amber-700 font-bold !bg-amber-400 !text-white",
+                                                toDelete: "bg-red-100 text-red-700 font-bold !bg-red-500 !text-white"
+                                            }}
                                         />
                                     </div>
 
-                                    {memberSelectedDate && (
+                                    {(datesToAdd.length > 0 || datesToDelete.length > 0) && (
                                         <div className="p-5 border-t border-slate-50 bg-slate-50/50 space-y-4">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <CheckCircle2 size={16} className="text-success" />
-                                                <span className="text-sm font-bold text-primary">
-                                                    {format(memberSelectedDate, "MM월 dd일")} 기록 설정
-                                                </span>
+                                            <div className="flex items-center justify-between transition-all">
+                                                <div className="space-y-1">
+                                                    <p className="text-xs font-bold text-slate-500">대기 중인 변경사항</p>
+                                                    <div className="flex gap-2">
+                                                        {datesToAdd.length > 0 && <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">+{datesToAdd.length}일 추가</span>}
+                                                        {datesToDelete.length > 0 && <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">-{datesToDelete.length}일 삭제</span>}
+                                                    </div>
+                                                </div>
+                                                <Button
+                                                    onClick={handleBatchUpdate}
+                                                    className="rounded-xl bg-primary px-6 font-black italic shadow-lg"
+                                                    disabled={isSubmitting}
+                                                >
+                                                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "저장하기"}
+                                                </Button>
                                             </div>
-                                            <div className="hidden">
-                                                <Select onValueChange={(v) => setMemberLogForm({ ...memberLogForm, type: v as any })} value={memberLogForm.type}>
-                                                    <SelectTrigger className="h-11 rounded-xl bg-white border-slate-100">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="running">러닝</SelectItem>
-                                                        <SelectItem value="gym">헬스/홈트</SelectItem>
-                                                        <SelectItem value="walking">걷기/산책</SelectItem>
-                                                        <SelectItem value="yoga">요가/필라테스</SelectItem>
-                                                        <SelectItem value="sports">기타 스포츠</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                <Input
-                                                    type="number"
-                                                    value={memberLogForm.duration}
-                                                    onChange={(e) => setMemberLogForm({ ...memberLogForm, duration: e.target.value })}
-                                                    className="h-11 rounded-xl bg-white border-slate-100"
-                                                />
-                                            </div>
-                                            <div className="text-center py-1">
-                                                <p className="text-[10px] text-slate-400">기본값(헬스/60분)으로 자동 등록됩니다.</p>
-                                            </div>
-                                            <Button
-                                                onClick={handleRegisterByMember}
-                                                className="w-full h-11 rounded-xl bg-slate-800 text-sm font-bold"
-                                                disabled={isSubmitting}
-                                            >
-                                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "선택 일자에 저장"}
-                                            </Button>
                                         </div>
                                     )}
                                 </CardContent>

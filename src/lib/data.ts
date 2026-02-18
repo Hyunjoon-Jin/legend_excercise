@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -19,14 +19,14 @@ export const updateProfile = async (userId: string, updates: Partial<Profile>) =
     return { data, error };
 };
 
-export const createMember = async (username: string, displayName?: string) => {
-    // We let the database generate the ID via gen_random_uuid()
+export const createMember = async (username: string, displayName?: string, role: UserRole = 'member') => {
     const { data, error } = await supabase
         .from('profiles')
         .insert([{
+            id: crypto.randomUUID(),
             username,
             display_name: displayName || username,
-            role: 'member',
+            role,
             tier: 'Bronze',
             password: '1234'
         }])
@@ -80,6 +80,16 @@ export const updateLogStatus = async (logId: string, status: 'approved' | 'rejec
         .from('workout_logs')
         .update({ status, admin_note: adminNote })
         .eq('id', logId);
+    return { data, error };
+};
+
+export const deleteWorkoutLogs = async (userId: string, seasonId: string, dates: string[]) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('season_id', seasonId)
+        .in('workout_date', dates);
     return { data, error };
 };
 
