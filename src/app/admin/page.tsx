@@ -46,6 +46,7 @@ export default function AdminPage() {
         duration: "60",
         comment: ""
     });
+    const [existingLogUserIds, setExistingLogUserIds] = useState<string[]>([]);
 
     // Workflow 2: By Member
     const [selectedMemberId, setSelectedMemberId] = useState<string>("");
@@ -110,6 +111,29 @@ export default function AdminPage() {
 
         fetchData();
     }, [isAuthenticated, user, router]);
+
+    // Fetch existing logs for selected date
+    useEffect(() => {
+        if (!activeSeason || activeTab !== 'by-date') return;
+
+        const fetchExistingLogs = async () => {
+            const dateStr = format(selectedDate, 'yyyy-MM-dd');
+            const { data } = await supabase
+                .from('workout_logs')
+                .select('user_id')
+                .eq('season_id', activeSeason.id)
+                .eq('workout_date', dateStr)
+                .eq('status', 'approved');
+
+            if (data) {
+                setExistingLogUserIds(data.map((log: any) => log.user_id));
+            } else {
+                setExistingLogUserIds([]);
+            }
+        };
+
+        fetchExistingLogs();
+    }, [selectedDate, activeSeason, activeTab]);
 
     // Fetch logs when selected member changes
     useEffect(() => {
@@ -457,6 +481,7 @@ export default function AdminPage() {
                                     <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1 scrollbar-hide">
                                         {members.map((m) => {
                                             const isSelected = dateLogForm.userIds.includes(m.id);
+                                            const isAlreadyRegistered = existingLogUserIds.includes(m.id);
                                             return (
                                                 <button
                                                     key={m.id}
@@ -469,13 +494,18 @@ export default function AdminPage() {
                                                         }));
                                                     }}
                                                     className={cn(
-                                                        "px-2 py-2 rounded-xl text-[11px] font-bold border transition-all truncate",
+                                                        "relative px-2 py-2 rounded-xl text-[11px] font-bold border transition-all truncate",
                                                         isSelected
                                                             ? "bg-primary text-white border-primary shadow-sm"
-                                                            : "bg-slate-50 text-slate-500 border-transparent hover:border-slate-200"
+                                                            : isAlreadyRegistered
+                                                                ? "bg-slate-100 text-slate-400 border-slate-200 opacity-60"
+                                                                : "bg-slate-50 text-slate-500 border-transparent hover:border-slate-200"
                                                     )}
                                                 >
                                                     {m.username}
+                                                    {isAlreadyRegistered && !isSelected && (
+                                                        <span className="absolute top-0 right-1 text-[7px] font-black text-slate-400 italic">DONE</span>
+                                                    )}
                                                 </button>
                                             );
                                         })}
@@ -563,7 +593,17 @@ export default function AdminPage() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-0">
-                                    <div className="flex justify-center p-2">
+                                    <div className="flex flex-col items-center p-2">
+                                        <div className="flex justify-between w-full px-4 mb-2">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setCurrentMonth(new Date())}
+                                                className="text-[10px] font-bold text-slate-400 h-7"
+                                            >
+                                                이번 달로
+                                            </Button>
+                                        </div>
                                         <Calendar
                                             mode="single"
                                             selected={undefined}
