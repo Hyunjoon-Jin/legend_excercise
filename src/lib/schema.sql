@@ -37,17 +37,28 @@ CREATE TABLE IF NOT EXISTS workout_logs (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 4. Votes (MVP 투표)
+-- 4. Votes (MVP 투표: 1인 2표 가능, 동일인 중복 불가)
 CREATE TABLE IF NOT EXISTS votes (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   season_id UUID REFERENCES seasons(id) ON DELETE CASCADE NOT NULL,
   voter_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   candidate_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(season_id, voter_id)
+  UNIQUE(season_id, voter_id, candidate_id)
 );
 
--- 5. Notifications (알림 정보)
+-- 5. MVP PRs (자신 성과랑하기)
+CREATE TABLE IF NOT EXISTS mvp_prs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  season_id UUID REFERENCES seasons(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  image_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(season_id, user_id)
+);
+
+-- 6. Notifications (알림 정보)
 CREATE TABLE IF NOT EXISTS notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
@@ -63,6 +74,7 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE seasons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE workout_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mvp_prs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Policies (이미 존재할 수 있으므로 DO 블록 사용 추천 또는 수동 관리)
@@ -111,6 +123,15 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
     CREATE POLICY "Users can cast votes in active seasons" ON votes FOR INSERT WITH CHECK (auth.uid() = voter_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- MVP PRs Policies
+DO $$ BEGIN
+    CREATE POLICY "MVP PRs are viewable by everyone" ON mvp_prs FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can upsert own MVP PR" ON mvp_prs FOR ALL USING (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Notifications Policies

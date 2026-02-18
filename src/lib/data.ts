@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -115,6 +115,7 @@ export const getRankings = async (seasonId: string) => {
 
     // 2. Aggregate data by user
     const rankingMap: Record<string, {
+        userId: string;
         name: string;
         tier: string;
         workoutPoints: number;
@@ -129,6 +130,7 @@ export const getRankings = async (seasonId: string) => {
         const userId = log.user_id;
         if (!rankingMap[userId]) {
             rankingMap[userId] = {
+                userId: userId,
                 name: log.profiles.username,
                 tier: log.profiles.tier,
                 workoutPoints: 0,
@@ -176,8 +178,18 @@ export const getRankings = async (seasonId: string) => {
     };
 };
 
-// --- MVP Voting ---
 export const castVote = async (seasonId: string, voterId: string, candidateId: string) => {
+    // Check if voter already cast 2 votes
+    const { count } = await supabase
+        .from('votes')
+        .select('*', { count: 'exact', head: true })
+        .eq('season_id', seasonId)
+        .eq('voter_id', voterId);
+
+    if (count !== null && count >= 2) {
+        return { data: null, error: new Error("인당 최대 2표까지만 추천 가능합니다.") };
+    }
+
     const { data, error } = await supabase
         .from('votes')
         .insert([{ season_id: seasonId, voter_id: voterId, candidate_id: candidateId }])
@@ -186,14 +198,36 @@ export const castVote = async (seasonId: string, voterId: string, candidateId: s
     return { data, error };
 };
 
-export const hasVoted = async (seasonId: string, voterId: string) => {
+export const getVotes = async (seasonId: string, voterId: string) => {
     const { data, error } = await supabase
         .from('votes')
         .select('*')
         .eq('season_id', seasonId)
-        .eq('voter_id', voterId)
+        .eq('voter_id', voterId);
+    return { data: data as Vote[], error };
+};
+
+export const hasVoted = async (seasonId: string, voterId: string) => {
+    const { data, error } = await getVotes(seasonId, voterId);
+    return { data: (data && data.length >= 2), error };
+};
+
+// --- MVP PRs ---
+export const getMVPPrs = async (seasonId: string) => {
+    const { data, error } = await supabase
+        .from('mvp_prs')
+        .select('*')
+        .eq('season_id', seasonId);
+    return { data: data as MVPPr[], error };
+};
+
+export const submitMVPPr = async (pr: Omit<MVPPr, 'id' | 'created_at'>) => {
+    const { data, error } = await supabase
+        .from('mvp_prs')
+        .upsert([pr], { onConflict: 'season_id,user_id' })
+        .select()
         .single();
-    return { data: !!data, error };
+    return { data, error };
 };
 
 // --- Notifications ---

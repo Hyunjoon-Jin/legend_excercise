@@ -40,7 +40,7 @@ export default function AdminPage() {
     // Workflow 1: By Date
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [dateLogForm, setDateLogForm] = useState({
-        userId: "",
+        userIds: [] as string[],
         type: "gym" as any,
         duration: "60",
         comment: ""
@@ -117,26 +117,29 @@ export default function AdminPage() {
     }, [selectedMemberId, activeSeason]);
 
     const handleRegisterByDate = async () => {
-        if (!dateLogForm.userId || !activeSeason) {
-            alert("회원을 선택해 주세요.");
+        if (dateLogForm.userIds.length === 0 || !activeSeason) {
+            alert("최소 한 명 이상의 회원을 선택해 주세요.");
             return;
         }
 
         setIsSubmitting(true);
         try {
-            const { error } = await submitWorkoutLog({
-                user_id: dateLogForm.userId,
+            const logsToInsert = dateLogForm.userIds.map(uid => ({
+                user_id: uid,
                 season_id: activeSeason.id,
                 workout_date: format(selectedDate, 'yyyy-MM-dd'),
                 workout_type: dateLogForm.type,
                 duration_minutes: parseInt(dateLogForm.duration),
                 proof_image_url: "admin-registered",
-                comment: dateLogForm.comment || `${format(selectedDate, 'MM/dd')} 일자별 직접 등록`,
-            });
+                status: 'approved',
+                comment: dateLogForm.comment || `${format(selectedDate, 'MM/dd')} 관리자 일괄 등록`,
+            }));
+
+            const { error } = await supabase.from('workout_logs').insert(logsToInsert);
 
             if (error) throw error;
-            alert("운동 기록이 등록되었습니다.");
-            setDateLogForm(prev => ({ ...prev, userId: "" }));
+            alert(`${dateLogForm.userIds.length}명의 회원이 등록되었습니다.`);
+            setDateLogForm(prev => ({ ...prev, userIds: [] }));
         } catch (err: any) {
             alert("등록 중 오류: " + err.message);
         } finally {
@@ -277,7 +280,7 @@ export default function AdminPage() {
                 .eq('id', activeSeason.id);
 
             if (error) throw error;
-            alert("시즌 설정이 업데이트되었습니다.");
+            alert(`🔥 버닝 기간 설정이 완료되었습니다!\n기간: ${burningDates.start} ~ ${burningDates.end}`);
 
             // Refresh season
             const { data } = await getActiveSeason();
@@ -366,18 +369,48 @@ export default function AdminPage() {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="p-5 space-y-5 bg-white">
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-bold text-slate-500">회원 선택</Label>
-                                    <Select onValueChange={(v) => setDateLogForm({ ...dateLogForm, userId: v })} value={dateLogForm.userId}>
-                                        <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-none">
-                                            <SelectValue placeholder="누구가 운동했나요?" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {members.map((m) => (
-                                                <SelectItem key={m.id} value={m.id}>{m.username}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between px-1">
+                                        <Label className="text-xs font-bold text-slate-500">회원 선택 (복수 선택 가능)</Label>
+                                        <button
+                                            onClick={() => {
+                                                const allIds = members.map(m => m.id);
+                                                setDateLogForm(prev => ({
+                                                    ...prev,
+                                                    userIds: prev.userIds.length === allIds.length ? [] : allIds
+                                                }));
+                                            }}
+                                            className="text-[10px] font-bold text-accent hover:underline"
+                                        >
+                                            {dateLogForm.userIds.length === members.length ? "전체 해제" : "전체 선택"}
+                                        </button>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 max-h-40 overflow-y-auto p-1 scrollbar-hide">
+                                        {members.map((m) => {
+                                            const isSelected = dateLogForm.userIds.includes(m.id);
+                                            return (
+                                                <button
+                                                    key={m.id}
+                                                    onClick={() => {
+                                                        setDateLogForm(prev => ({
+                                                            ...prev,
+                                                            userIds: isSelected
+                                                                ? prev.userIds.filter(id => id !== m.id)
+                                                                : [...prev.userIds, m.id]
+                                                        }));
+                                                    }}
+                                                    className={cn(
+                                                        "px-2 py-2 rounded-xl text-[11px] font-bold border transition-all truncate",
+                                                        isSelected
+                                                            ? "bg-primary text-white border-primary shadow-sm"
+                                                            : "bg-slate-50 text-slate-500 border-transparent hover:border-slate-200"
+                                                    )}
+                                                >
+                                                    {m.username}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                                 <div className="hidden">
                                     <div className="space-y-2">

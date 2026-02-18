@@ -201,17 +201,38 @@ export default function DashboardPage() {
         {/* Burning Period Notice */}
         {activeSeason?.burning_start_date && activeSeason?.burning_end_date && (() => {
           const today = new Date();
+          today.setHours(0, 0, 0, 0);
           const start = new Date(activeSeason.burning_start_date);
           const end = new Date(activeSeason.burning_end_date);
-          if (today >= start && today <= end) {
+
+          const isUpcoming = today < start;
+          const isActive = today >= start && today <= end;
+
+          if (isActive) {
             return (
-              <div className="bg-amber-100 border border-amber-200 p-4 rounded-2xl flex items-center justify-between">
+              <div className="bg-amber-100 border border-amber-200 p-4 rounded-2xl flex items-center justify-between shadow-sm animate-pulse">
                 <div>
-                  <p className="text-amber-800 font-black text-sm">🔥 지금은 버닝 기간!</p>
-                  <p className="text-[10px] text-amber-700 font-bold">인증 시 점수가 2배로 인정됩니다.</p>
+                  <p className="text-amber-800 font-black text-sm">🔥 현재는 버닝 기간입니다!</p>
+                  <p className="text-[10px] text-amber-700 font-bold">
+                    기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')} (인증 점수 2배)
+                  </p>
                 </div>
-                <div className="text-[10px] bg-amber-400 text-white px-2 py-1 rounded-full font-black">
-                  {format(end, 'MM/dd')}까지
+                <div className="text-[10px] bg-amber-500 text-white px-3 py-1.5 rounded-full font-black">
+                  진행 중
+                </div>
+              </div>
+            );
+          } else if (isUpcoming) {
+            return (
+              <div className="bg-slate-100 border border-slate-200 p-4 rounded-2xl flex items-center justify-between opacity-80">
+                <div>
+                  <p className="text-slate-700 font-black text-sm">📅 차주 버닝 기간 예고</p>
+                  <p className="text-[10px] text-slate-500 font-bold">
+                    기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')}
+                  </p>
+                </div>
+                <div className="text-[10px] bg-slate-400 text-white px-3 py-1.5 rounded-full font-black">
+                  진행 예정
                 </div>
               </div>
             );
