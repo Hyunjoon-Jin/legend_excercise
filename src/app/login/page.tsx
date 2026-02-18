@@ -50,8 +50,8 @@ export default function LoginPage() {
 
             if (fetchError || !profile) {
                 // 관리자/테스트 계정용 폴백 (DB에 아직 데이터가 없을 경우를 대비)
-                if (data.username === "관리자" && data.password === "0000") {
-                    login({ id: "admin-id", username: "관리자", role: "admin", tier: "Gold" });
+                if (data.username === "진현준" && data.password === "1234") {
+                    login({ id: "admin-id", username: "진현준", role: "admin", tier: "Gold" });
                     router.push("/");
                     return;
                 }
