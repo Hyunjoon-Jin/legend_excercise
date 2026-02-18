@@ -23,6 +23,8 @@ import { MVPVoting } from "@/components/features/mvp-voting";
 import { getActiveSeason, getRankings, getWorkoutLogs, getNotifications } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { format } from "date-fns";
+import { ko } from "date-fns/locale";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -196,12 +198,33 @@ export default function DashboardPage() {
         {/* MVP Voting Section (Visible when season is active) */}
         {activeSeason && <MVPVoting />}
 
+        {/* Burning Period Notice */}
+        {activeSeason?.burning_start_date && activeSeason?.burning_end_date && (() => {
+          const today = new Date();
+          const start = new Date(activeSeason.burning_start_date);
+          const end = new Date(activeSeason.burning_end_date);
+          if (today >= start && today <= end) {
+            return (
+              <div className="bg-amber-100 border border-amber-200 p-4 rounded-2xl flex items-center justify-between">
+                <div>
+                  <p className="text-amber-800 font-black text-sm">🔥 지금은 버닝 기간!</p>
+                  <p className="text-[10px] text-amber-700 font-bold">인증 시 점수가 2배로 인정됩니다.</p>
+                </div>
+                <div className="text-[10px] bg-amber-400 text-white px-2 py-1 rounded-full font-black">
+                  {format(end, 'MM/dd')}까지
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
         {/* Real-time Ranking Board */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-md font-bold text-primary flex items-center gap-2">
               <Trophy size={18} className="text-accent" />
-              실시간 랭킹 {activeSeason && <span className="text-xs font-normal text-slate-400">({activeSeason.name})</span>}
+              실시간 종합 랭킹 {activeSeason && <span className="text-xs font-normal text-slate-400">({activeSeason.name})</span>}
             </h3>
             <Button
               variant="ghost"
@@ -233,8 +256,11 @@ export default function DashboardPage() {
                       <span className="font-bold text-primary text-sm">{item.name}</span>
                       <span className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded-md">{item.tier}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-primary">{item.count}회</span>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-xs font-black text-primary leading-none">{item.totalScore}점</p>
+                        <p className="text-[8px] text-slate-400 mt-0.5">{item.logCount}회 인증</p>
+                      </div>
                       <ChevronRight size={14} className="text-slate-300" />
                     </div>
                   </div>

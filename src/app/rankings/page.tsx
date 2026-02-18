@@ -77,11 +77,22 @@ export default function RankingsPage() {
                                                 {index === 0 && <Trophy size={14} className="text-amber-500" />}
                                                 {rank.name === user?.username && <span className="text-[10px] bg-primary text-white px-1.5 py-0.5 rounded-full">MY</span>}
                                             </p>
-                                            <p className="text-[11px] text-slate-400">{rank.tier} 티어</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-[10px] text-slate-400 font-medium">{rank.tier} 티어</span>
+                                                <span className="text-[10px] text-slate-300">|</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">운동 {rank.workoutPoints}점</span>
+                                                {rank.mvpPoints > 0 && (
+                                                    <>
+                                                        <span className="text-[10px] text-slate-300">|</span>
+                                                        <span className="text-[10px] text-amber-600 font-bold">MVP +{rank.mvpPoints}</span>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-lg font-black text-primary">{rank.count}<span className="text-[10px] font-normal ml-0.5 text-slate-400 font-bold">회 인증</span></p>
+                                        <p className="text-lg font-black text-primary leading-none">{rank.totalScore}<span className="text-[10px] font-bold ml-0.5 text-slate-400">점</span></p>
+                                        <p className="text-[9px] text-slate-400 mt-1">{rank.logCount}회 인증</p>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -94,36 +105,7 @@ export default function RankingsPage() {
                 </div>
             </main>
 
-            {/* Bottom Nav */}
-            <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] h-16 bg-white border-t border-slate-100 flex items-center justify-around px-2 z-40">
-                <button
-                    onClick={() => router.push("/")}
-                    className="flex flex-col items-center gap-1 text-slate-400 opacity-60"
-                >
-                    <PlusCircle size={22} />
-                    <span className="text-[10px] font-bold">인증</span>
-                </button>
-                <button
-                    onClick={() => router.push("/calendar")}
-                    className="flex flex-col items-center gap-1 text-slate-400 opacity-60"
-                >
-                    <Calendar size={22} />
-                    <span className="text-[10px]">캘린더</span>
-                </button>
-                <button
-                    className="flex flex-col items-center gap-1 text-primary"
-                >
-                    <Trophy size={22} className="text-accent" />
-                    <span className="text-[10px] font-bold">랭킹</span>
-                </button>
-                <button
-                    onClick={() => router.push("/profile")}
-                    className="flex flex-col items-center gap-1 text-slate-400 opacity-60"
-                >
-                    <UserIcon size={22} />
-                    <span className="text-[10px]">내정보</span>
-                </button>
-            </nav>
+            <BottomNav />
         </div>
     );
 }

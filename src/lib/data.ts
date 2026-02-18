@@ -95,30 +95,83 @@ export const deleteWorkoutLogs = async (userId: string, seasonId: string, dates:
 
 // --- Rankings ---
 export const getRankings = async (seasonId: string) => {
-    const { data, error } = await supabase
-        .from('workout_logs')
-        .select('user_id, profiles(username, tier)')
-        .eq('season_id', seasonId)
-        .eq('status', 'approved');
+    // 1. Fetch Season, Logs, and Votes in parallel
+    const [seasonRes, logsRes, votesRes] = await Promise.all([
+        supabase.from('seasons').select('*').eq('id', seasonId).single(),
+        supabase.from('workout_logs')
+            .select('user_id, workout_date, profiles(username, tier)')
+            .eq('season_id', seasonId)
+            .eq('status', 'approved'),
+        supabase.from('votes')
+            .select('candidate_id')
+            .eq('season_id', seasonId)
+    ]);
 
-    if (error) return { data: null, error };
+    if (logsRes.error) return { data: null, error: logsRes.error };
 
-    // Aggregate by user
-    const rankingMap: Record<string, { name: string; tier: string; count: number }> = {};
-    data.forEach((log: any) => {
+    const season = seasonRes.data as Season;
+    const logs = logsRes.data as any[];
+    const votes = votesRes.data as any[];
+
+    // 2. Aggregate data by user
+    const rankingMap: Record<string, {
+        name: string;
+        tier: string;
+        workoutPoints: number;
+        mvpPoints: number;
+        totalScore: number;
+        logCount: number;
+        voteCount: number;
+    }> = {};
+
+    // Process Logs
+    logs.forEach((log) => {
         const userId = log.user_id;
         if (!rankingMap[userId]) {
             rankingMap[userId] = {
                 name: log.profiles.username,
                 tier: log.profiles.tier,
-                count: 0
+                workoutPoints: 0,
+                mvpPoints: 0,
+                totalScore: 0,
+                logCount: 0,
+                voteCount: 0
             };
         }
-        rankingMap[userId].count++;
+
+        // Check for Burning Period
+        let points = 1;
+        if (season?.burning_start_date && season?.burning_end_date) {
+            const workDate = new Date(log.workout_date);
+            const burnStart = new Date(season.burning_start_date);
+            const burnEnd = new Date(season.burning_end_date);
+            if (workDate >= burnStart && workDate <= burnEnd) {
+                points = 2; // Double points during burning period
+            }
+        }
+
+        rankingMap[userId].workoutPoints += points;
+        rankingMap[userId].logCount += 1;
+    });
+
+    // Process Votes
+    if (votes) {
+        votes.forEach((vote) => {
+            const candidateId = vote.candidate_id;
+            if (rankingMap[candidateId]) {
+                rankingMap[candidateId].mvpPoints += 2; // 2 points per vote
+                rankingMap[candidateId].voteCount += 1;
+            }
+        });
+    }
+
+    // Calculate Total Score
+    Object.values(rankingMap).forEach(item => {
+        item.totalScore = item.workoutPoints + item.mvpPoints;
     });
 
     return {
-        data: Object.values(rankingMap).sort((a, b) => b.count - a.count),
+        data: Object.values(rankingMap).sort((a, b) => b.totalScore - a.totalScore),
         error: null
     };
 };

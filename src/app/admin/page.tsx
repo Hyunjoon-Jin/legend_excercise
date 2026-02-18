@@ -29,7 +29,7 @@ export default function AdminPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     // Navigation & Tabs
-    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage'>('by-date');
+    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons'>('by-date');
 
     // Common State
     const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -60,6 +60,21 @@ export default function AdminPage() {
     // New Member State
     const [newMemberName, setNewMemberName] = useState<string>("");
     const [isCreatingMember, setIsCreatingMember] = useState(false);
+
+    // Season Management State
+    const [burningDates, setBurningDates] = useState({
+        start: "",
+        end: ""
+    });
+
+    useEffect(() => {
+        if (activeSeason) {
+            setBurningDates({
+                start: activeSeason.burning_start_date || "",
+                end: activeSeason.burning_end_date || ""
+            });
+        }
+    }, [activeSeason]);
 
     useEffect(() => {
         if (!isAuthenticated || user?.role !== 'admin') {
@@ -248,6 +263,32 @@ export default function AdminPage() {
         }
     };
 
+    const handleUpdateSeason = async () => {
+        if (!activeSeason) return;
+
+        setIsSubmitting(true);
+        try {
+            const { error } = await supabase
+                .from('seasons')
+                .update({
+                    burning_start_date: burningDates.start || null,
+                    burning_end_date: burningDates.end || null
+                })
+                .eq('id', activeSeason.id);
+
+            if (error) throw error;
+            alert("시즌 설정이 업데이트되었습니다.");
+
+            // Refresh season
+            const { data } = await getActiveSeason();
+            if (data) setActiveSeason(data);
+        } catch (err: any) {
+            alert("업데이트 중 오류: " + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-secondary">
@@ -284,6 +325,12 @@ export default function AdminPage() {
                         className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                     >
                         회원관리
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('seasons')}
+                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'seasons' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                    >
+                        시즌관리
                     </button>
                 </div>
             </header>
@@ -516,6 +563,59 @@ export default function AdminPage() {
                             </div>
                         </section>
                     </div>
+                )}
+                {/* Workflow 4: Season Management */}
+                {activeTab === 'seasons' && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary">
+                            <Save size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">시즌 및 버닝 기간 설정</h2>
+                        </div>
+                        <Card className="border-none shadow-sm overflow-hidden">
+                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-3">
+                                <CardTitle className="text-sm font-bold text-slate-700">종합 순위 고도화 설정</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-6 space-y-6">
+                                <div className="space-y-4">
+                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                        <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                                            💡 <strong>버닝 기간</strong>을 설정하면 해당 기간의 운동 점수가 <strong>2배(2점)</strong>로 자동 계산됩니다.<br />
+                                            MVP 투표 결과도 종합 점수에 포함됩니다 (1표 당 2점).
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-500">버닝 시작일</Label>
+                                            <Input
+                                                type="date"
+                                                value={burningDates.start}
+                                                onChange={(e) => setBurningDates({ ...burningDates, start: e.target.value })}
+                                                className="h-11 rounded-xl bg-slate-50 border-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-500">버닝 종료일</Label>
+                                            <Input
+                                                type="date"
+                                                value={burningDates.end}
+                                                onChange={(e) => setBurningDates({ ...burningDates, end: e.target.value })}
+                                                className="h-11 rounded-xl bg-slate-50 border-none"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    onClick={handleUpdateSeason}
+                                    className="w-full h-12 rounded-xl bg-primary text-sm font-black shadow-lg shadow-slate-200"
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "시즌 설정 저장"}
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    </section>
                 )}
             </main>
         </div>

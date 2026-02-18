@@ -18,6 +18,8 @@ export interface Season {
     name: string;
     start_date: string;
     end_date: string;
+    burning_start_date?: string;
+    burning_end_date?: string;
     is_active: boolean;
     created_at: string;
 }

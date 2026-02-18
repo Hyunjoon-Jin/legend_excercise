@@ -17,6 +17,9 @@
   --color-error: #dc2626;
   --color-wait: #64748b;
 
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1e293b;
+
   --font-sans: "Pretendard Variable", "Pretendard", "Inter", "sans-serif";
 
   --radius-lg: 16px;

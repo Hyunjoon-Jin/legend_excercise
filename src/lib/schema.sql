@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS seasons (
   name TEXT NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
+  burning_start_date DATE,
+  burning_end_date DATE,
   is_active BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
