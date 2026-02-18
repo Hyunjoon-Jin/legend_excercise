@@ -80,13 +80,9 @@ export default function RankingsPage() {
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[10px] text-slate-400 font-medium">{rank.tier} 티어</span>
                                                 <span className="text-[10px] text-slate-300">|</span>
-                                                <span className="text-[10px] text-slate-400 font-medium">운동 {rank.workoutPoints}점</span>
-                                                {rank.mvpPoints > 0 && (
-                                                    <>
-                                                        <span className="text-[10px] text-slate-300">|</span>
-                                                        <span className="text-[10px] text-amber-600 font-bold">MVP +{rank.mvpPoints}</span>
-                                                    </>
-                                                )}
+                                                <span className="text-[10px] text-slate-400 font-medium italic">인증 {rank.workoutPoints}점</span>
+                                                <span className="text-[10px] text-slate-300">|</span>
+                                                <span className="text-[10px] text-amber-600 font-bold">MVP {rank.mvpPoints}점</span>
                                             </div>
                                         </div>
                                     </div>
