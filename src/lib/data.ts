@@ -45,6 +45,36 @@ export const getActiveSeason = async () => {
     return { data, error };
 };
 
+export const getAllSeasons = async () => {
+    const { data, error } = await supabase
+        .from('seasons')
+        .select('*')
+        .order('start_date', { ascending: false });
+    return { data, error };
+};
+
+export const createSeason = async (season: Omit<Season, 'id' | 'created_at' | 'is_active'>) => {
+    const { data, error } = await supabase
+        .from('seasons')
+        .insert([{ ...season, is_active: false }])
+        .select()
+        .single();
+    return { data, error };
+};
+
+export const toggleSeasonActive = async (seasonId: string) => {
+    // 1. Deactivate all seasons
+    await supabase.from('seasons').update({ is_active: false }).neq('id', seasonId);
+    // 2. Activate the target season
+    const { data, error } = await supabase
+        .from('seasons')
+        .update({ is_active: true })
+        .eq('id', seasonId)
+        .select()
+        .single();
+    return { data, error };
+};
+
 // --- Workout Logs ---
 export const getWorkoutLogs = async (seasonId: string) => {
     const { data, error } = await supabase

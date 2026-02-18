@@ -14,9 +14,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getActiveSeason, submitWorkoutLog, createMember } from "@/lib/data";
+import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -58,6 +59,15 @@ export default function AdminPage() {
         comment: ""
     });
 
+    // Workflow 4: Season Management
+    const [seasons, setSeasons] = useState<Season[]>([]);
+    const [newSeasonForm, setNewSeasonForm] = useState({
+        name: "",
+        start_date: format(new Date(), 'yyyy-MM-dd'),
+        end_date: format(new Date(), 'yyyy-MM-dd')
+    });
+    const [isCreatingSeason, setIsCreatingSeason] = useState(false);
+
     // New Member State
     const [newMemberName, setNewMemberName] = useState<string>("");
     const [isCreatingMember, setIsCreatingMember] = useState(false);
@@ -86,13 +96,15 @@ export default function AdminPage() {
 
         const fetchData = async () => {
             setIsLoading(true);
-            const [seasonRes, membersRes] = await Promise.all([
+            const [seasonRes, membersRes, allSeasonsRes] = await Promise.all([
                 getActiveSeason(),
-                supabase.from('profiles').select('*').order('username')
+                supabase.from('profiles').select('*').order('username'),
+                getAllSeasons()
             ]);
 
             if (seasonRes.data) setActiveSeason(seasonRes.data);
             if (membersRes.data) setMembers(membersRes.data);
+            if (allSeasonsRes.data) setSeasons(allSeasonsRes.data);
             setIsLoading(false);
         };
 
@@ -296,6 +308,54 @@ export default function AdminPage() {
             if (data) setActiveSeason(data);
         } catch (err: any) {
             alert("업데이트 중 오류: " + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleCreateSeason = async () => {
+        if (!newSeasonForm.name || !newSeasonForm.start_date || !newSeasonForm.end_date) {
+            alert("모든 필드를 입력해 주세요.");
+            return;
+        }
+
+        setIsCreatingSeason(true);
+        try {
+            const { data, error } = await createSeason(newSeasonForm);
+            if (error) throw error;
+            alert(`✅ 시즌 '${data.name}'이 생성되었습니다.`);
+            setNewSeasonForm({
+                name: "",
+                start_date: format(new Date(), 'yyyy-MM-dd'),
+                end_date: format(new Date(), 'yyyy-MM-dd')
+            });
+            // Refresh
+            const { data: allSeasons } = await getAllSeasons();
+            if (allSeasons) setSeasons(allSeasons);
+        } catch (err: any) {
+            alert("생성 중 오류: " + err.message);
+        } finally {
+            setIsCreatingSeason(false);
+        }
+    };
+
+    const handleToggleSeason = async (id: string, name: string) => {
+        if (!confirm(`'${name}' 시즌을 활성화하시겠습니까? 다른 시즌은 비활성화됩니다.`)) return;
+
+        setIsSubmitting(true);
+        try {
+            const { error } = await toggleSeasonActive(id);
+            if (error) throw error;
+            alert(`🚀 '${name}' 시즌이 활성화되었습니다.`);
+            // Refresh
+            const [seasonRes, allSeasonsRes] = await Promise.all([
+                getActiveSeason(),
+                getAllSeasons()
+            ]);
+            if (seasonRes.data) setActiveSeason(seasonRes.data);
+            if (allSeasonsRes.data) setSeasons(allSeasonsRes.data);
+        } catch (err: any) {
+            alert("전환 중 오류: " + err.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -610,56 +670,154 @@ export default function AdminPage() {
                 )}
                 {/* Workflow 4: Season Management */}
                 {activeTab === 'seasons' && (
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary">
-                            <Save size={20} className="text-slate-400" />
-                            <h2 className="text-md font-bold">시즌 및 버닝 기간 설정</h2>
-                        </div>
-                        <Card className="border-none shadow-sm overflow-hidden">
-                            <CardHeader className="bg-slate-50 border-b border-slate-100 py-3">
-                                <CardTitle className="text-sm font-bold text-slate-700">종합 순위 고도화 설정</CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-6 space-y-6">
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                        <p className="text-xs text-amber-800 font-medium leading-relaxed">
-                                            💡 <strong>버닝 기간</strong>을 설정하면 해당 기간의 운동 점수가 <strong>2배(2점)</strong>로 자동 계산됩니다.<br />
-                                            MVP 투표 결과도 종합 점수에 포함됩니다 (1표 당 2점).
-                                        </p>
+                    <div className="space-y-6">
+                        {/* 1. Create New Season */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 text-primary">
+                                <PlusCircle size={20} className="text-slate-400" />
+                                <h2 className="text-md font-bold">새 시즌 생성</h2>
+                            </div>
+                            <Card className="border-none shadow-sm overflow-hidden">
+                                <CardContent className="p-6 space-y-4">
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-bold text-slate-500 ml-1">시즌 이름</Label>
+                                        <Input
+                                            placeholder="예: 2024 머슬 시즌 1"
+                                            value={newSeasonForm.name}
+                                            onChange={(e) => setNewSeasonForm({ ...newSeasonForm, name: e.target.value })}
+                                            className="h-11 rounded-xl bg-slate-50 border-none"
+                                        />
                                     </div>
-
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-slate-500">버닝 시작일</Label>
+                                            <Label className="text-xs font-bold text-slate-500 ml-1">시즌 시작일</Label>
                                             <Input
                                                 type="date"
-                                                value={burningDates.start}
-                                                onChange={(e) => setBurningDates({ ...burningDates, start: e.target.value })}
+                                                value={newSeasonForm.start_date}
+                                                onChange={(e) => setNewSeasonForm({ ...newSeasonForm, start_date: e.target.value })}
                                                 className="h-11 rounded-xl bg-slate-50 border-none"
                                             />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label className="text-xs font-bold text-slate-500">버닝 종료일</Label>
+                                            <Label className="text-xs font-bold text-slate-500 ml-1">시즌 종료일</Label>
                                             <Input
                                                 type="date"
-                                                value={burningDates.end}
-                                                onChange={(e) => setBurningDates({ ...burningDates, end: e.target.value })}
+                                                value={newSeasonForm.end_date}
+                                                onChange={(e) => setNewSeasonForm({ ...newSeasonForm, end_date: e.target.value })}
                                                 className="h-11 rounded-xl bg-slate-50 border-none"
                                             />
                                         </div>
                                     </div>
-                                </div>
+                                    <Button
+                                        onClick={handleCreateSeason}
+                                        className="w-full h-12 rounded-xl bg-primary text-sm font-black shadow-lg shadow-slate-200 mt-2"
+                                        disabled={isCreatingSeason}
+                                    >
+                                        {isCreatingSeason ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <PlusCircle size={18} className="mr-2" />}
+                                        시즌 생성하기
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </section>
 
-                                <Button
-                                    onClick={handleUpdateSeason}
-                                    className="w-full h-12 rounded-xl bg-primary text-sm font-black shadow-lg shadow-slate-200"
-                                    disabled={isSubmitting}
-                                >
-                                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "시즌 설정 저장"}
-                                </Button>
-                            </CardContent>
-                        </Card>
-                    </section>
+                        {/* 2. Burning Period for Active Season */}
+                        {activeSeason && (
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 text-primary">
+                                    <Save size={20} className="text-slate-400" />
+                                    <h2 className="text-md font-bold">활성 시즌 설정 ({activeSeason.name})</h2>
+                                </div>
+                                <Card className="border-none shadow-sm overflow-hidden">
+                                    <CardHeader className="bg-slate-50 border-b border-slate-100 py-3">
+                                        <CardTitle className="text-sm font-bold text-emerald-700 flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                            버닝 기간 설정
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-6 space-y-6">
+                                        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                            <p className="text-xs text-amber-800 font-medium leading-relaxed">
+                                                💡 <strong>버닝 기간</strong>을 설정하면 해당 기간의 운동 점수가 <strong>2배(2점)</strong>로 자동 계산됩니다.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold text-slate-500 ml-1">버닝 시작일</Label>
+                                                <Input
+                                                    type="date"
+                                                    value={burningDates.start}
+                                                    onChange={(e) => setBurningDates({ ...burningDates, start: e.target.value })}
+                                                    className="h-11 rounded-xl bg-slate-50 border-none"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-bold text-slate-500 ml-1">버닝 종료일</Label>
+                                                <Input
+                                                    type="date"
+                                                    value={burningDates.end}
+                                                    onChange={(e) => setBurningDates({ ...burningDates, end: e.target.value })}
+                                                    className="h-11 rounded-xl bg-slate-50 border-none"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <Button
+                                            onClick={handleUpdateSeason}
+                                            className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-sm font-black shadow-lg shadow-emerald-100"
+                                            disabled={isSubmitting}
+                                        >
+                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "버닝 설정 저장"}
+                                        </Button>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {/* 3. Season List & Activation */}
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-2 text-primary">
+                                <CalendarDays size={20} className="text-slate-400" />
+                                <h2 className="text-md font-bold">시즌 목록 및 활성화</h2>
+                            </div>
+                            <div className="space-y-3">
+                                {seasons.length === 0 && (
+                                    <p className="text-center py-10 text-slate-400 text-xs">등록된 시즌이 없습니다.</p>
+                                )}
+                                {seasons.map((s) => (
+                                    <Card key={s.id} className={cn("border-none shadow-sm transition-all", s.is_active ? "ring-2 ring-primary ring-offset-2" : "opacity-80")}>
+                                        <CardContent className="p-5 flex items-center justify-between">
+                                            <div className="flex items-center gap-4">
+                                                <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black", s.is_active ? "bg-primary" : "bg-slate-200 text-slate-400")}>
+                                                    {s.is_active ? <CheckCircle2 size={24} /> : <CalendarDays size={24} />}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-black text-sm text-primary">{s.name}</h3>
+                                                        {s.is_active && <Badge variant="wait" className="bg-primary text-white text-[9px] px-1.5 py-0 border-none">활성</Badge>}
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                                        {format(new Date(s.start_date), 'yyyy.MM.dd')} ~ {format(new Date(s.end_date), 'yyyy.MM.dd')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {!s.is_active && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleToggleSeason(s.id, s.name)}
+                                                    className="h-8 text-[11px] font-black rounded-lg border-primary text-primary hover:bg-primary hover:text-white"
+                                                    disabled={isSubmitting}
+                                                >
+                                                    활성화하기
+                                                </Button>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
                 )}
             </main>
         </div>
