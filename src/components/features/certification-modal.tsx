@@ -107,6 +107,7 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
             const { error: submitError } = await submitWorkoutLog({
                 user_id: user.id,
                 season_id: activeSeasonId,
+                workout_date: new Date().toISOString().split('T')[0],
                 workout_type: data.type as any,
                 duration_minutes: parseInt(data.duration),
                 proof_image_url: publicUrl,
