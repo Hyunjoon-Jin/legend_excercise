@@ -117,7 +117,12 @@ export default function AdminPage() {
     }, [selectedMemberId, activeSeason]);
 
     const handleRegisterByDate = async () => {
-        if (dateLogForm.userIds.length === 0 || !activeSeason) {
+        if (!activeSeason) {
+            alert("활성화된 시즌이 없습니다. 시즌 설정 탭에서 시즌을 먼저 생성하고 활성화해 주세요.");
+            return;
+        }
+
+        if (dateLogForm.userIds.length === 0) {
             alert("최소 한 명 이상의 회원을 선택해 주세요.");
             return;
         }
@@ -415,7 +420,7 @@ export default function AdminPage() {
                                 <div className="hidden">
                                     <div className="space-y-2">
                                         <Label className="text-xs font-bold text-slate-500">운동 종류</Label>
-                                        <Select onValueChange={(v) => setDateLogForm({ ...dateLogForm, type: v as any })} value={dateLogForm.type}>
+                                        <Select onValueChange={(v) => setDateLogForm(prev => ({ ...prev, type: v as any }))} value={dateLogForm.type}>
                                             <SelectTrigger className="h-12 rounded-xl bg-slate-50 border-none">
                                                 <SelectValue />
                                             </SelectTrigger>
@@ -433,7 +438,7 @@ export default function AdminPage() {
                                         <Input
                                             type="number"
                                             value={dateLogForm.duration}
-                                            onChange={(e) => setDateLogForm({ ...dateLogForm, duration: e.target.value })}
+                                            onChange={(e) => setDateLogForm(prev => ({ ...prev, duration: e.target.value }))}
                                             className="h-12 rounded-xl bg-slate-50 border-none"
                                         />
                                     </div>
