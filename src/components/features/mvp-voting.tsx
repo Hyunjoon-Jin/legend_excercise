@@ -30,7 +30,8 @@ import {
     getVotes,
     hasVoted,
     getMVPPrs,
-    submitMVPPr
+    submitMVPPr,
+    uploadMVPImage
 } from "@/lib/data";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export function MVPVoting() {
 
     // Self PR Form
     const [myPr, setMyPr] = useState<{ content: string; image_url: string }>({ content: "", image_url: "" });
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isSubmittingPr, setIsSubmittingPr] = useState(false);
     const [showPrForm, setShowPrForm] = useState(false);
 
@@ -128,23 +130,40 @@ export function MVPVoting() {
         }
 
         setIsSubmittingPr(true);
-        const { error } = await submitMVPPr({
-            season_id: activeSeasonId,
-            user_id: user.id,
-            content: myPr.content,
-            image_url: myPr.image_url
-        });
+        try {
+            let uploadedUrl = myPr.image_url;
 
-        if (error) {
-            alert("등록 중 오류: " + error.message);
-        } else {
+            // 1. Upload image if a new file is selected
+            if (selectedFile) {
+                const { data: publicUrl, error: uploadError } = await uploadMVPImage(selectedFile, user.id);
+                if (uploadError) {
+                    throw new Error("이미지 업로드 실패: " + uploadError.message);
+                }
+                uploadedUrl = publicUrl || "";
+            }
+
+            // 2. Submit PR
+            const { error } = await submitMVPPr({
+                season_id: activeSeasonId,
+                user_id: user.id,
+                content: myPr.content,
+                image_url: uploadedUrl
+            });
+
+            if (error) throw error;
+
             alert("이번 시즌 성과 PR이 등록되었습니다!");
             setShowPrForm(false);
+            setSelectedFile(null);
+
             // Refresh PRS
             const { data } = await getMVPPrs(activeSeasonId);
             if (data) setPrs(data);
+        } catch (err: any) {
+            alert("등록 중 오류: " + err.message);
+        } finally {
+            setIsSubmittingPr(false);
         }
-        setIsSubmittingPr(false);
     };
 
     if (isLoading) return <div className="h-40 flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
@@ -186,17 +205,45 @@ export function MVPVoting() {
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">인증 사진 URL (선택)</Label>
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 relative">
-                                            <ImageIcon size={14} className="absolute left-3 top-3 text-slate-300" />
-                                            <Input
-                                                placeholder="이미지 주소를 입력하세요"
-                                                value={myPr.image_url}
-                                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMyPr({ ...myPr, image_url: e.target.value })}
-                                                className="h-10 pl-9 rounded-xl bg-white border-white shadow-inner text-xs"
-                                            />
+                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">인증 사진 첨부 (선택)</Label>
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex-1 relative">
+                                                <ImageIcon size={14} className="absolute left-3 top-3 text-slate-300" />
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                                                    className="hidden"
+                                                    id="mvp-image-upload"
+                                                />
+                                                <label
+                                                    htmlFor="mvp-image-upload"
+                                                    className="flex h-10 w-full rounded-xl bg-white border-white shadow-inner text-xs items-center pl-9 cursor-pointer text-slate-400 font-medium hover:bg-slate-50 transition-colors overflow-hidden truncate"
+                                                >
+                                                    {selectedFile ? selectedFile.name : (myPr.image_url ? "사진이 이미 등록되어 있습니다" : "사진 파일을 선택하세요")}
+                                                </label>
+                                            </div>
+                                            {(selectedFile || myPr.image_url) && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => { setSelectedFile(null); setMyPr({ ...myPr, image_url: "" }) }}
+                                                    className="h-10 w-10 p-0 rounded-xl bg-white text-slate-400 hover:text-red-500"
+                                                >
+                                                    <X size={16} />
+                                                </Button>
+                                            )}
                                         </div>
+                                        {(selectedFile || myPr.image_url) && (
+                                            <div className="w-20 h-20 rounded-xl border border-slate-100 overflow-hidden bg-white shadow-sm">
+                                                <img
+                                                    src={selectedFile ? URL.createObjectURL(selectedFile) : myPr.image_url}
+                                                    className="w-full h-full object-cover"
+                                                    alt="preview"
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <Button

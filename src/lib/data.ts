@@ -260,6 +260,24 @@ export const submitMVPPr = async (pr: Omit<MVPPr, 'id' | 'created_at'>) => {
     return { data, error };
 };
 
+export const uploadMVPImage = async (file: File, userId: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}-${Date.now()}.${fileExt}`;
+    const filePath = `mvp-prs/${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+    if (error) return { data: null, error };
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+    return { data: publicUrl, error: null };
+};
+
 // --- Notifications ---
 export const getNotifications = async (userId: string) => {
     const { data, error } = await supabase
