@@ -65,7 +65,7 @@ export default function CalendarPage() {
     });
 
     const selectedDayLogs = logs.filter(log =>
-        isSameDay(new Date(log.created_at), selectedDate)
+        isSameDay(new Date(log.workout_date), selectedDate)
     );
 
     return (
@@ -111,7 +111,7 @@ export default function CalendarPage() {
                         {/* Calendar Grid */}
                         <div className="grid grid-cols-7 bg-slate-50 gap-[1px]">
                             {days.map((day, i) => {
-                                const hasLog = logs.some(log => isSameDay(new Date(log.created_at), day));
+                                const hasLog = logs.some(log => isSameDay(new Date(log.workout_date), day));
                                 const isSelected = isSameDay(day, selectedDate);
                                 const isCurrentMonth = isSameMonth(day, currentMonth);
 
@@ -157,8 +157,8 @@ export default function CalendarPage() {
                                         </div>
                                         <div>
                                             <p className="font-bold text-primary">
-                                                {log.workout_type === 'running' ? '러닝' :
-                                                    log.workout_type === 'gym' ? '헬스/홈트' :
+                                                {log.workout_type === 'gym' ? '운동완료' :
+                                                    log.workout_type === 'running' ? '러닝' :
                                                         log.workout_type === 'walking' ? '걷기' :
                                                             log.workout_type === 'yoga' ? '요가' : '스포츠'}
                                             </p>

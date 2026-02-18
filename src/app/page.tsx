@@ -23,7 +23,7 @@ import { NotificationList } from "@/components/features/notification-list";
 import { getActiveSeason, getRankings, getWorkoutLogs, getNotifications } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { format } from "date-fns";
+import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
 import { ko } from "date-fns/locale";
 
 export default function DashboardPage() {
@@ -80,9 +80,17 @@ export default function DashboardPage() {
   }
 
   const approvedCount = myLogs.filter(l => l.status === 'approved').length;
-  // 주간 카운트는 간단하게 최근 7일부터 계산하거나, 월요일 기준으로 계산
-  // 여기서는 규정에 맞춰 월~일 주간 단위로 계산하는 로직이 필요하나 UI상으론 approvedCount 사용
-  const weeklyApproved = approvedCount; // Placeholder
+
+  // 주간 카운트: 이번 주(월~일) 기간 내에 포함된 workout_date 기준
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // 월요일 시작
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 }); // 일요일 종료
+
+  const weeklyApproved = myLogs.filter(l => {
+    if (l.status !== 'approved') return false;
+    const workDate = new Date(l.workout_date);
+    return isWithinInterval(workDate, { start: weekStart, end: weekEnd });
+  }).length;
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-secondary">
@@ -212,12 +220,12 @@ export default function DashboardPage() {
             <div className="mt-6 space-y-2">
               <div className="flex justify-between text-xs font-medium">
                 <span className="text-muted-foreground">이번 주 운동 현황</span>
-                <span className="text-primary">{Math.min(approvedCount, 2)}/2회</span>
+                <span className="text-primary">{Math.min(weeklyApproved, 2)}/2회</span>
               </div>
               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((approvedCount / 2) * 100, 100)}%` }}
+                  style={{ width: `${Math.min((weeklyApproved / 2) * 100, 100)}%` }}
                 />
               </div>
             </div>

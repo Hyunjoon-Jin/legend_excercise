@@ -160,7 +160,7 @@ export default function ProfilePage() {
                 ) : showHistory ? (
                     <div className="space-y-4">
                         {logs.length > 0 ? (
-                            logs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((log) => (
+                            logs.sort((a, b) => new Date(b.workout_date).getTime() - new Date(a.workout_date).getTime()).map((log) => (
                                 <Card key={log.id} className="border-none shadow-sm bg-white rounded-2xl overflow-hidden border-l-4 border-accent">
                                     <CardContent className="p-4 flex items-center justify-between">
                                         <div className="flex items-center gap-4">
@@ -169,12 +169,12 @@ export default function ProfilePage() {
                                             </div>
                                             <div>
                                                 <p className="font-black text-primary text-sm">
-                                                    {log.workout_type === 'gym' ? '💪 헬스/홈트' :
+                                                    {log.workout_type === 'gym' ? '💪 운동완료' :
                                                         log.workout_type === 'running' ? '🏃 러닝' :
                                                             log.workout_type === 'walking' ? '🚶 걷기' : '🔥 스포츠'}
                                                 </p>
                                                 <p className="text-[11px] text-slate-400 font-bold">
-                                                    {format(new Date(log.created_at), "yyyy.MM.dd (EEE) / HH:mm", { locale: ko })}
+                                                    {format(new Date(log.workout_date), "yyyy.MM.dd (EEE)", { locale: ko })}
                                                 </p>
                                             </div>
                                         </div>

@@ -175,7 +175,7 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="running">러닝</SelectItem>
-                                    <SelectItem value="gym">헬스/홈트</SelectItem>
+                                    <SelectItem value="gym">운동완료</SelectItem>
                                     <SelectItem value="walking">걷기/산책</SelectItem>
                                     <SelectItem value="yoga">요가/필라테스</SelectItem>
                                     <SelectItem value="sports">기타 스포츠</SelectItem>
