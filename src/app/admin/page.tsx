@@ -273,7 +273,10 @@ export default function AdminPage() {
     };
 
     const handleUpdateSeason = async () => {
-        if (!activeSeason) return;
+        if (!activeSeason) {
+            alert("활성화된 시즌이 없습니다. 시즌을 먼저 생성해주세요.");
+            return;
+        }
 
         setIsSubmitting(true);
         try {

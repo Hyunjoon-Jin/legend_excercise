@@ -5,14 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Trophy,
-  Calendar,
-  PlusCircle,
-  BookOpen,
-  User as UserIcon,
-  ChevronRight,
+import { Trophy, UserIcon, PlusCircle, Calendar } from "lucide-react";
+ChevronRight,
   LogOut,
   Bell
 } from "lucide-react";
@@ -135,6 +129,57 @@ export default function DashboardPage() {
       )}
 
       <main className="flex-1 px-6 space-y-6 overflow-y-auto">
+        {/* Burning Period Notice */}
+        {activeSeason?.burning_start_date && activeSeason?.burning_end_date && (() => {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const start = new Date(activeSeason.burning_start_date);
+          const end = new Date(activeSeason.burning_end_date);
+
+          const isUpcoming = today < start;
+          const isActive = today >= start && today <= end;
+
+          if (isActive) {
+            return (
+              <div className="bg-amber-100 border border-amber-200 p-4 rounded-2xl flex items-center justify-between shadow-sm animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-amber-400 rounded-full flex items-center justify-center text-white shadow-inner">
+                    <Trophy size={20} />
+                  </div>
+                  <div>
+                    <p className="text-amber-800 font-black text-sm">🔥 현재는 버닝 기간입니다!</p>
+                    <p className="text-[10px] text-amber-700 font-bold">
+                      기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')} (인증 점수 2배)
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[10px] bg-amber-500 text-white px-3 py-1.5 rounded-full font-black">
+                  진행 중
+                </div>
+              </div>
+            );
+          } else if (isUpcoming) {
+            return (
+              <div className="bg-slate-100 border border-slate-200 p-4 rounded-2xl flex items-center justify-between opacity-80">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-400">
+                    <Calendar size={20} />
+                  </div>
+                  <div>
+                    <p className="text-slate-700 font-black text-sm">📅 차주 버닝 기간 예고</p>
+                    <p className="text-[10px] text-slate-500 font-bold">
+                      기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[10px] bg-slate-400 text-white px-3 py-1.5 rounded-full font-black">
+                  진행 예정
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
         {/* Profile Card */}
         <Card className="border-none shadow-sm overflow-hidden bg-white">
           <CardContent className="p-6">
