@@ -233,16 +233,18 @@ export default function DashboardPage() {
         </Card>
 
         {/* Quick Actions / Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-          <Button
-            variant="default"
-            className="h-auto flex-col gap-2 py-5 shadow-sm active:scale-95 transition-transform"
-            size="lg"
-            onClick={() => setShowCertModal(true)}
-          >
-            <PlusCircle size={24} className="text-accent" />
-            <span className="font-bold">운동 인증하기</span>
-          </Button>
+        <div className={cn("grid gap-4", user.role === 'admin' ? "grid-cols-2" : "grid-cols-1")}>
+          {user.role === 'admin' && (
+            <Button
+              variant="default"
+              className="h-auto flex-col gap-2 py-5 shadow-sm active:scale-95 transition-transform"
+              size="lg"
+              onClick={() => setShowCertModal(true)}
+            >
+              <PlusCircle size={24} className="text-accent" />
+              <span className="font-bold">운동 인증하기</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             className="h-auto flex-col gap-2 py-5 bg-white border-none shadow-sm active:scale-95 transition-transform"

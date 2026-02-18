@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { PlusCircle, Calendar, Trophy, User as UserIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store/use-auth-store";
 
 interface BottomNavProps {
     onPlusClick?: () => void;
@@ -11,13 +12,14 @@ interface BottomNavProps {
 export function BottomNav({ onPlusClick }: BottomNavProps) {
     const router = useRouter();
     const pathname = usePathname();
+    const { user } = useAuthStore();
 
     const tabs = [
-        { id: "cert", label: "인증", icon: PlusCircle, path: "/", isPlus: true },
+        { id: "cert", label: "인증", icon: PlusCircle, path: "/", isPlus: true, adminOnly: true },
         { id: "calendar", label: "캘린더", icon: Calendar, path: "/calendar" },
         { id: "rankings", label: "랭킹", icon: Trophy, path: "/rankings" },
         { id: "profile", label: "내정보", icon: UserIcon, path: "/profile" },
-    ];
+    ].filter(tab => !tab.adminOnly || user?.role === 'admin');
 
     return (
         <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] h-20 bg-white border-t border-slate-100 flex items-center justify-around px-2 z-40 pb-2">
