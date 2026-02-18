@@ -5,10 +5,16 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Trophy, UserIcon, PlusCircle, Calendar } from "lucide-react";
-ChevronRight,
+import { Badge } from "@/components/ui/badge";
+import {
+  Trophy,
+  User as UserIcon,
+  PlusCircle,
+  Calendar,
+  ChevronRight,
   LogOut,
-  Bell
+  Bell,
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
