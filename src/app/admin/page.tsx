@@ -15,7 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
@@ -30,7 +30,7 @@ export default function AdminPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     // Navigation & Tabs
-    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons'>('by-date');
+    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs'>('by-date');
 
     // Common State
     const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -72,6 +72,11 @@ export default function AdminPage() {
     // New Member State
     const [newMemberName, setNewMemberName] = useState<string>("");
     const [isCreatingMember, setIsCreatingMember] = useState(false);
+
+    // Workflow 5: Certification Management
+    const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+    const [expandedMemberLogs, setExpandedMemberLogs] = useState<WorkoutLog[]>([]);
+    const [isFetchingMemberDetail, setIsFetchingMemberDetail] = useState(false);
 
     // Season Management State
     const [burningDates, setBurningDates] = useState({
@@ -385,6 +390,59 @@ export default function AdminPage() {
         }
     };
 
+    const toggleMemberExpand = async (memberId: string) => {
+        if (expandedMemberId === memberId) {
+            setExpandedMemberId(null);
+            return;
+        }
+
+        setExpandedMemberId(memberId);
+        if (!activeSeason) return;
+
+        setIsFetchingMemberDetail(true);
+        try {
+            const { data } = await supabase
+                .from('workout_logs')
+                .select('*')
+                .eq('user_id', memberId)
+                .eq('season_id', activeSeason.id)
+                .order('workout_date', { ascending: false });
+
+            if (data) setExpandedMemberLogs(data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsFetchingMemberDetail(false);
+        }
+    };
+
+    const handleDeleteRecord = async (logId: string) => {
+        if (!confirm("이 운동 기록을 삭제하시겠습니까?")) return;
+
+        try {
+            const { error } = await supabase
+                .from('workout_logs')
+                .delete()
+                .eq('id', logId);
+
+            if (error) throw error;
+
+            alert("기록이 삭제되었습니다.");
+            // Refresh expanded logs
+            if (expandedMemberId) {
+                const { data } = await supabase
+                    .from('workout_logs')
+                    .select('*')
+                    .eq('user_id', expandedMemberId)
+                    .eq('season_id', activeSeason?.id)
+                    .order('workout_date', { ascending: false });
+                if (data) setExpandedMemberLogs(data);
+            }
+        } catch (err: any) {
+            alert("삭제 오류: " + err.message);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-secondary">
@@ -421,6 +479,12 @@ export default function AdminPage() {
                         className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                     >
                         회원관리
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('cert-logs')}
+                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'cert-logs' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                    >
+                        인증관리
                     </button>
                     <button
                         onClick={() => setActiveTab('seasons')}
@@ -647,6 +711,93 @@ export default function AdminPage() {
                                 </CardContent>
                             </Card>
                         )}
+                    </section>
+                )}
+
+                {/* Workflow 5: Certification Management (Advanced) */}
+                {activeTab === 'cert-logs' && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary">
+                            <CheckCircle2 size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">인증 기록 정밀 관리</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                            {members.map((m) => {
+                                const isExpanded = expandedMemberId === m.id;
+                                return (
+                                    <div key={m.id} className="bg-white rounded-2xl shadow-sm border border-slate-50 overflow-hidden transition-all">
+                                        <div
+                                            onClick={() => toggleMemberExpand(m.id)}
+                                            className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-300">
+                                                    {m.username[0]}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-primary">{m.username}</p>
+                                                    <p className="text-[10px] text-slate-400">{m.tier} · 이번 시즌 인증 완료</p>
+                                                </div>
+                                            </div>
+                                            <div className={cn("text-slate-300 transition-transform", isExpanded && "rotate-180")}>
+                                                <ChevronLeft className="-rotate-90" size={18} />
+                                            </div>
+                                        </div>
+
+                                        {isExpanded && (
+                                            <div className="px-4 pb-4 border-t border-slate-50 bg-slate-50/30">
+                                                {isFetchingMemberDetail ? (
+                                                    <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" /></div>
+                                                ) : (
+                                                    <div className="pt-4 space-y-3">
+                                                        <div className="grid grid-cols-2 gap-2 mb-4">
+                                                            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                                                <p className="text-[9px] font-bold text-slate-400">이번 시즌 총 점수</p>
+                                                                <p className="text-sm font-black text-primary">계산 중...</p>
+                                                            </div>
+                                                            <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                                                                <p className="text-[9px] font-bold text-slate-400">인증 횟수</p>
+                                                                <p className="text-sm font-black text-primary">{expandedMemberLogs.length}회</p>
+                                                            </div>
+                                                        </div>
+
+                                                        <p className="text-[10px] font-bold text-slate-500 mb-2 px-1">기존 운동 기록 목록 ({expandedMemberLogs.length})</p>
+                                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
+                                                            {expandedMemberLogs.length === 0 ? (
+                                                                <p className="text-center py-6 text-[10px] text-slate-400">등록된 기록이 없습니다.</p>
+                                                            ) : (
+                                                                expandedMemberLogs.map((log) => (
+                                                                    <div key={log.id} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 rounded-lg bg-primary/5 flex items-center justify-center text-primary">
+                                                                                <CalendarIcon size={14} />
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-xs font-bold text-slate-700">{format(new Date(log.workout_date), 'MM월 dd일')}</p>
+                                                                                <p className="text-[9px] text-slate-400">{log.workout_type} · {log.duration_minutes}분</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            onClick={() => handleDeleteRecord(log.id)}
+                                                                            className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
+                                                                        >
+                                                                            <X size={14} />
+                                                                        </Button>
+                                                                    </div>
+                                                                ))
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </section>
                 )}
 
