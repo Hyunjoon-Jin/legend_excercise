@@ -129,7 +129,7 @@ export const getRankings = async (seasonId: string) => {
     const [seasonRes, logsRes, votesRes] = await Promise.all([
         supabase.from('seasons').select('*').eq('id', seasonId).single(),
         supabase.from('workout_logs')
-            .select('user_id, workout_date, profiles(username, tier)')
+            .select('user_id, workout_date, workout_type, profiles(username, tier)')
             .eq('season_id', seasonId)
             .eq('status', 'approved'),
         supabase.from('votes')
@@ -153,11 +153,15 @@ export const getRankings = async (seasonId: string) => {
         totalScore: number;
         logCount: number;
         voteCount: number;
+        // Tracking to ensure 1 cert/day
+        dailyLogs: Record<string, number>;
     }> = {};
 
     // Process Logs
     logs.forEach((log) => {
         const userId = log.user_id;
+        const dateStr = log.workout_date;
+
         if (!rankingMap[userId]) {
             rankingMap[userId] = {
                 userId: userId,
@@ -167,23 +171,37 @@ export const getRankings = async (seasonId: string) => {
                 mvpPoints: 0,
                 totalScore: 0,
                 logCount: 0,
-                voteCount: 0
+                voteCount: 0,
+                dailyLogs: {}
             };
         }
 
-        // Check for Burning Period
-        let points = 1;
+        // Base Points: Running = 2, Others = 1
+        const basePoints = log.workout_type === 'running' ? 2 : 1;
+
+        // Burning Multiplier
+        let multiplier = 1;
         if (season?.burning_start_date && season?.burning_end_date) {
-            const workDate = new Date(log.workout_date);
+            const workDate = new Date(dateStr);
             const burnStart = new Date(season.burning_start_date);
             const burnEnd = new Date(season.burning_end_date);
             if (workDate >= burnStart && workDate <= burnEnd) {
-                points = 2; // Double points during burning period
+                multiplier = 2;
             }
         }
 
-        rankingMap[userId].workoutPoints += points;
-        rankingMap[userId].logCount += 1;
+        const logPoints = basePoints * multiplier;
+
+        // If multiple logs on the same day, keep the one with higher points
+        if (!rankingMap[userId].dailyLogs[dateStr] || rankingMap[userId].dailyLogs[dateStr] < logPoints) {
+            rankingMap[userId].dailyLogs[dateStr] = logPoints;
+        }
+    });
+
+    // Sum up daily points and counts
+    Object.values(rankingMap).forEach(userRank => {
+        userRank.workoutPoints = Object.values(userRank.dailyLogs).reduce((a, b) => a + b, 0);
+        userRank.logCount = Object.keys(userRank.dailyLogs).length;
     });
 
     // Process Votes
@@ -191,7 +209,7 @@ export const getRankings = async (seasonId: string) => {
         votes.forEach((vote) => {
             const candidateId = vote.candidate_id;
             if (rankingMap[candidateId]) {
-                rankingMap[candidateId].mvpPoints += 2; // 2 points per vote
+                rankingMap[candidateId].mvpPoints += 2; // Fixed: 2 points per vote
                 rankingMap[candidateId].voteCount += 1;
             }
         });
