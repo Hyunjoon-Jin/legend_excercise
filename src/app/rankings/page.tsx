@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, Trophy, Medal, Star, Loader2, PlusCircle, Calendar, User as UserIcon } from "lucide-react";
 import { getRankings, getActiveSeason } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { BottomNav } from "@/components/layout/bottom-nav";
 
 export default function RankingsPage() {
     const router = useRouter();

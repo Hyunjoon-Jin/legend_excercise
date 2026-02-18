@@ -24,6 +24,7 @@ import { ko } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getWorkoutLogs, getActiveSeason } from "@/lib/data";
 import { WorkoutLog } from "@/types/database";
+import { BottomNav } from "@/components/layout/bottom-nav";
 
 export default function CalendarPage() {
     const router = useRouter();
@@ -175,6 +176,7 @@ export default function CalendarPage() {
                     </div>
                 </section>
             </main>
+            <BottomNav />
         </div>
     );
 }

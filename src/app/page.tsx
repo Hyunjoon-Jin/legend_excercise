@@ -22,6 +22,7 @@ import { NotificationList } from "@/components/features/notification-list";
 import { MVPVoting } from "@/components/features/mvp-voting";
 import { getActiveSeason, getRankings, getWorkoutLogs, getNotifications } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
+import { BottomNav } from "@/components/layout/bottom-nav";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -280,37 +281,7 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] h-16 bg-white border-t border-slate-100 flex items-center justify-around px-2 z-40">
-        <button
-          onClick={() => setShowCertModal(true)}
-          className="flex flex-col items-center gap-1 text-primary"
-        >
-          <PlusCircle size={22} className="text-accent" />
-          <span className="text-[10px] font-bold">인증</span>
-        </button>
-        <button
-          onClick={() => router.push("/calendar")}
-          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
-        >
-          <Calendar size={22} />
-          <span className="text-[10px]">캘린더</span>
-        </button>
-        <button
-          onClick={() => router.push("/rankings")}
-          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
-        >
-          <Trophy size={22} />
-          <span className="text-[10px]">랭킹</span>
-        </button>
-        <button
-          onClick={() => router.push("/profile")}
-          className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
-        >
-          <UserIcon size={22} />
-          <span className="text-[10px]">내정보</span>
-        </button>
-      </nav>
+      <BottomNav onPlusClick={() => setShowCertModal(true)} />
 
       <CertificationModal
         isOpen={showCertModal}

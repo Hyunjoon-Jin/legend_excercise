@@ -26,14 +26,28 @@
 
 @layer base {
   :root {
-    --background: 248 250 252;
-    /* Slate 50 #f8fafc */
-    --foreground: 30 41 59;
-    /* Slate 800 #1e293b */
+    --background: 210 40% 98%;
+    /* Light slate #f8fafc */
+    --foreground: 222 47% 11%;
+    /* Dark slate #1e293b */
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 38 92% 50%;
+    /* #d97706 */
+    --accent-foreground: 0 0% 100%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 47.4% 11.2%;
   }
 
   body {
-    background-color: rgb(var(--background));
+    background-color: hsl(var(--background));
     @apply bg-background text-primary font-sans antialiased;
   }
 }
