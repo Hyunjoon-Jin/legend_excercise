@@ -14,12 +14,12 @@ import {
   ChevronRight,
   LogOut,
   Bell,
-  BookOpen
+  BookOpen,
+  Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { MVPVoting } from "@/components/features/mvp-voting";
 import { getActiveSeason, getRankings, getWorkoutLogs, getNotifications } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
@@ -246,8 +246,31 @@ export default function DashboardPage() {
           </Button>
         </div>
 
-        {/* MVP Voting Section (Visible when season is active) */}
-        {activeSeason && <MVPVoting />}
+        {/* MVP Voting Banner */}
+        {activeSeason && (
+          <div
+            onClick={() => router.push("/mvp")}
+            className="bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-5 rounded-3xl text-white shadow-lg shadow-amber-100 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group"
+          >
+            <div className="relative z-10">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Star size={12} className="text-white fill-white animate-pulse" />
+                <span className="text-[10px] font-black italic tracking-widest text-white/80">COMMUNITY</span>
+              </div>
+              <h3 className="text-lg font-black italic leading-tight">
+                MVP 투표 / <br />내 성과 자랑하러 가기
+              </h3>
+              <p className="text-[10px] text-white/70 font-bold mt-1.5 flex items-center gap-1">
+                지금 1위 후보들의 비결 확인하기 <ChevronRight size={10} />
+              </p>
+            </div>
+            <div className="relative z-10 bg-white/20 p-3 rounded-2xl backdrop-blur-sm group-hover:bg-white/30 transition-colors">
+              <Trophy size={32} className="text-white drop-shadow-md" />
+            </div>
+            {/* Decoration */}
+            <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+          </div>
+        )}
 
         {/* Real-time Ranking Board */}
         <section className="space-y-3">
