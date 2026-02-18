@@ -49,6 +49,7 @@ export default function AdminPage() {
     // Workflow 2: By Member
     const [selectedMemberId, setSelectedMemberId] = useState<string>("");
     const [memberLogs, setMemberLogs] = useState<WorkoutLog[]>([]);
+    const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
     const [datesToAdd, setDatesToAdd] = useState<Date[]>([]);
     const [datesToDelete, setDatesToDelete] = useState<string[]>([]); // workout_date strings
     const [memberLogForm, setMemberLogForm] = useState({
@@ -503,6 +504,8 @@ export default function AdminPage() {
                                         <Calendar
                                             mode="single"
                                             selected={undefined}
+                                            month={currentMonth}
+                                            onMonthChange={setCurrentMonth}
                                             onSelect={(date) => date && toggleDate(date)}
                                             className="rounded-md border-none"
                                             modifiers={{

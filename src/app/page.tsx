@@ -198,48 +198,6 @@ export default function DashboardPage() {
         {/* MVP Voting Section (Visible when season is active) */}
         {activeSeason && <MVPVoting />}
 
-        {/* Burning Period Notice */}
-        {activeSeason?.burning_start_date && activeSeason?.burning_end_date && (() => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const start = new Date(activeSeason.burning_start_date);
-          const end = new Date(activeSeason.burning_end_date);
-
-          const isUpcoming = today < start;
-          const isActive = today >= start && today <= end;
-
-          if (isActive) {
-            return (
-              <div className="bg-amber-100 border border-amber-200 p-4 rounded-2xl flex items-center justify-between shadow-sm animate-pulse">
-                <div>
-                  <p className="text-amber-800 font-black text-sm">🔥 현재는 버닝 기간입니다!</p>
-                  <p className="text-[10px] text-amber-700 font-bold">
-                    기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')} (인증 점수 2배)
-                  </p>
-                </div>
-                <div className="text-[10px] bg-amber-500 text-white px-3 py-1.5 rounded-full font-black">
-                  진행 중
-                </div>
-              </div>
-            );
-          } else if (isUpcoming) {
-            return (
-              <div className="bg-slate-100 border border-slate-200 p-4 rounded-2xl flex items-center justify-between opacity-80">
-                <div>
-                  <p className="text-slate-700 font-black text-sm">📅 차주 버닝 기간 예고</p>
-                  <p className="text-[10px] text-slate-500 font-bold">
-                    기간: {format(start, 'MM/dd')} ~ {format(end, 'MM/dd')}
-                  </p>
-                </div>
-                <div className="text-[10px] bg-slate-400 text-white px-3 py-1.5 rounded-full font-black">
-                  진행 예정
-                </div>
-              </div>
-            );
-          }
-          return null;
-        })()}
-
         {/* Real-time Ranking Board */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
