@@ -255,6 +255,16 @@ export const getVotes = async (seasonId: string, voterId: string) => {
     return { data: data as Vote[], error };
 };
 
+export const removeVote = async (seasonId: string, voterId: string, candidateId: string) => {
+    const { data, error } = await supabase
+        .from('votes')
+        .delete()
+        .eq('season_id', seasonId)
+        .eq('voter_id', voterId)
+        .eq('candidate_id', candidateId);
+    return { data, error };
+};
+
 export const hasVoted = async (seasonId: string, voterId: string) => {
     const { data, error } = await getVotes(seasonId, voterId);
     return { data: (data && data.length >= 2), error };

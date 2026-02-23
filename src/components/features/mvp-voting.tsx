@@ -27,6 +27,7 @@ import {
     getActiveSeason,
     getRankings,
     castVote,
+    removeVote,
     getVotes,
     hasVoted,
     getMVPPrs,
@@ -47,6 +48,7 @@ export function MVPVoting() {
     const [prs, setPrs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isVoting, setIsVoting] = useState<string | null>(null);
+    const [isCancelling, setIsCancelling] = useState<string | null>(null);
     const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null);
 
     // Self PR Form
@@ -93,7 +95,7 @@ export function MVPVoting() {
     }, [user]);
 
     const handleVote = async (targetUserId: string, targetName: string) => {
-        if (!user || !activeSeasonId || isVoting) return;
+        if (!user || !activeSeasonId || isVoting || isCancelling) return;
 
         if (targetUserId === user.id) {
             alert("자기 자신에게는 투표할 수 없습니다.");
@@ -120,6 +122,23 @@ export function MVPVoting() {
             alert(`${targetName} 님에게 소중한 한 표를 던졌습니다!`);
         }
         setIsVoting(null);
+    };
+
+    const handleCancelVote = async (targetUserId: string, targetName: string) => {
+        if (!user || !activeSeasonId || isVoting || isCancelling) return;
+
+        if (!confirm(`${targetName} 님에게 한 투표를 취소하시겠습니까?`)) return;
+
+        setIsCancelling(targetName);
+        const { error } = await removeVote(activeSeasonId, user.id, targetUserId);
+
+        if (error) {
+            alert(error.message || "오류가 발생했습니다.");
+        } else {
+            setMyVotes(prev => prev.filter(v => v.candidate_id !== targetUserId));
+            alert("투표가 취소되었습니다.");
+        }
+        setIsCancelling(null);
     };
 
     const handlePrSubmit = async () => {
@@ -367,12 +386,26 @@ export function MVPVoting() {
                                     size="sm"
                                     className={cn(
                                         "h-9 px-4 rounded-full font-bold transition-all",
-                                        alreadyVoted ? "bg-slate-100 text-slate-400 border-none" : "border-primary text-primary hover:bg-primary hover:text-white"
+                                        alreadyVoted ? "bg-red-50 text-red-500 border-red-100 hover:bg-red-100" : "border-primary text-primary hover:bg-primary hover:text-white"
                                     )}
-                                    onClick={() => c.userId && handleVote(c.userId, c.name)}
-                                    disabled={!!isVoting || isSelf || alreadyVoted || myVotes.length >= 2}
+                                    onClick={() => {
+                                        if (c.userId) {
+                                            if (alreadyVoted) {
+                                                handleCancelVote(c.userId, c.name);
+                                            } else {
+                                                handleVote(c.userId, c.name);
+                                            }
+                                        }
+                                    }}
+                                    disabled={!!isVoting || !!isCancelling || isSelf || (!alreadyVoted && myVotes.length >= 2)}
                                 >
-                                    {isVoting === c.name ? <Loader2 className="animate-spin w-4 h-4" /> : alreadyVoted ? "투표완료" : "투표하기"}
+                                    {isVoting === c.name || isCancelling === c.name ? (
+                                        <Loader2 className="animate-spin w-4 h-4" />
+                                    ) : alreadyVoted ? (
+                                        "투표취소"
+                                    ) : (
+                                        "투표하기"
+                                    )}
                                 </Button>
                                 {isSelf && <span className="text-[9px] text-slate-300 font-bold mr-2">본인 제외</span>}
                             </div>
