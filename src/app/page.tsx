@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getRankings, getWorkoutLogs, getNotifications } from "@/lib/data";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
@@ -35,9 +35,11 @@ export default function DashboardPage() {
 
   // Data States
   const [activeSeason, setActiveSeason] = useState<Season | null>(null);
+  const [recentlyClosedSeason, setRecentlyClosedSeason] = useState<Season | null>(null);
   const [rankings, setRankings] = useState<any[]>([]);
   const [myLogs, setMyLogs] = useState<WorkoutLog[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [myVoteCount, setMyVoteCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -50,7 +52,29 @@ export default function DashboardPage() {
     const fetchData = async () => {
       if (!user?.id) return;
       setIsLoading(true);
-      const { data: season } = await getActiveSeason();
+      const [{ data: season }, { data: allSeasons }] = await Promise.all([
+        getActiveSeason(),
+        getAllSeasons(),
+      ]);
+
+      // Find recently closed season (within last 7 days)
+      if (allSeasons) {
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const closed = allSeasons.find((s: Season) => {
+          if (!s.closed_at) return false;
+          return new Date(s.closed_at) >= oneWeekAgo;
+        });
+        if (closed) setRecentlyClosedSeason(closed);
+      }
+
+      // 투표 종료 3시간 이내인지 확인 후 votes 조회
+      if (season?.voting_open && season?.voting_ends_at) {
+        const msLeft = new Date(season.voting_ends_at).getTime() - Date.now();
+        if (msLeft > 0 && msLeft <= 3 * 60 * 60 * 1000) {
+          const { data: votes } = await getVotes(season.id, user.id);
+          setMyVoteCount(votes?.length ?? 0);
+        }
+      }
 
       const promises: any[] = [getNotifications(user.id)];
       if (season) {
@@ -77,6 +101,28 @@ export default function DashboardPage() {
 
   if (!isMounted || !isAuthenticated || !user) {
     return null;
+  }
+
+  const isAdmin = user?.role === 'admin';
+  // 투표 진행 중 + 비관리자 → 투표 집계 비공개
+  const votingActive = !isAdmin && !!(activeSeason?.is_active && activeSeason?.voting_open);
+
+  // 투표 긴급 공지: 종료 3시간 이내 + 미투표
+  const votingMsLeft = activeSeason?.voting_ends_at
+    ? new Date(activeSeason.voting_ends_at).getTime() - Date.now()
+    : null;
+  const isVotingUrgent = !isAdmin
+    && votingActive
+    && myVoteCount !== null
+    && myVoteCount < 2
+    && votingMsLeft !== null
+    && votingMsLeft > 0
+    && votingMsLeft <= 3 * 60 * 60 * 1000;
+
+  function formatRemaining(ms: number) {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
   }
 
   const approvedCount = myLogs.filter(l => l.status === 'approved').length;
@@ -143,6 +189,48 @@ export default function DashboardPage() {
       )}
 
       <main className="flex-1 px-6 space-y-6 overflow-y-auto">
+        {/* Season Result Banner (visible for 1 week after close) */}
+        {recentlyClosedSeason && (
+          <div
+            onClick={() => router.push(`/season-result/${recentlyClosedSeason.id}`)}
+            className="bg-gradient-to-br from-slate-800 to-slate-900 p-5 rounded-3xl text-white shadow-lg flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden"
+          >
+            <div className="relative z-10">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Trophy size={12} className="text-accent animate-pulse" />
+                <span className="text-[10px] font-black italic tracking-widest text-white/60">SEASON ENDED</span>
+              </div>
+              <h3 className="text-base font-black leading-tight">
+                🏁 {recentlyClosedSeason.name} 결과 확인하기
+              </h3>
+              <p className="text-[10px] text-white/50 font-bold mt-1">최종 순위 · 개인 성과 · MVP 결과 →</p>
+            </div>
+            <div className="relative z-10 bg-white/10 p-3 rounded-2xl">
+              <Trophy size={28} className="text-accent" />
+            </div>
+            <div className="absolute top-[-30%] right-[-5%] w-28 h-28 bg-accent/10 rounded-full blur-2xl" />
+          </div>
+        )}
+        {/* Urgent Voting Notice: < 3h remaining + not voted */}
+        {isVotingUrgent && votingMsLeft !== null && (
+          <div
+            onClick={() => router.push("/mvp")}
+            className="bg-red-600 rounded-3xl p-5 flex items-center gap-4 cursor-pointer active:scale-[0.98] transition-all shadow-lg shadow-red-200 animate-pulse"
+          >
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+              <Bell size={24} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-black text-white leading-tight">
+                ⏰ 투표 마감 {formatRemaining(votingMsLeft)} 전!
+              </p>
+              <p className="text-[11px] text-red-100 font-bold mt-0.5">
+                아직 {2 - myVoteCount!}표가 남았어요. 지금 바로 투표해 주세요!
+              </p>
+            </div>
+            <ChevronRight size={18} className="text-white/70 shrink-0" />
+          </div>
+        )}
         {/* Burning Period Notice */}
         {activeSeason?.burning_start_date && activeSeason?.burning_end_date && (() => {
           const today = new Date();
@@ -287,7 +375,11 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-md font-bold text-primary flex items-center gap-2">
               <Trophy size={18} className="text-accent" />
-              실시간 종합 랭킹 {activeSeason && <span className="text-xs font-normal text-slate-400">({activeSeason.name})</span>}
+              {votingActive ? "운동 인증 랭킹" : "실시간 종합 랭킹"}
+              {activeSeason && <span className="text-xs font-normal text-slate-400">({activeSeason.name})</span>}
+              {votingActive && (
+                <span className="text-[10px] bg-indigo-100 text-indigo-500 font-black px-2 py-0.5 rounded-full">집계 중</span>
+              )}
             </h3>
             <Button
               variant="ghost"
@@ -303,7 +395,10 @@ export default function DashboardPage() {
             {isLoading ? (
               [1, 2, 3].map(i => <div key={i} className="h-14 bg-white/50 animate-pulse rounded-xl" />)
             ) : rankings.length > 0 ? (
-              rankings.slice(0, 5).map((item, idx) => (
+              (votingActive
+                ? [...rankings].sort((a, b) => b.logCount - a.logCount)
+                : rankings
+              ).slice(0, 5).map((item, idx) => (
                 <div key={item.name} className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm">
                   <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs",
@@ -321,8 +416,17 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="text-right">
-                        <p className="text-xs font-black text-primary leading-none">{item.totalScore}점</p>
-                        <p className="text-[8px] text-slate-400 mt-0.5">{item.logCount}회 인증</p>
+                        {votingActive ? (
+                          <>
+                            <p className="text-xs font-black text-primary leading-none">{item.logCount}회</p>
+                            <p className="text-[8px] text-indigo-400 font-bold mt-0.5">인증 횟수</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs font-black text-primary leading-none">{item.totalScore}점</p>
+                            <p className="text-[8px] text-slate-400 mt-0.5">{item.logCount}회 인증</p>
+                          </>
+                        )}
                       </div>
                       <ChevronRight size={14} className="text-slate-300" />
                     </div>

@@ -148,3 +148,50 @@ DO $$ BEGIN
       EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- 7. Chat Messages (실시간 채팅)
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
+
+-- 8. Posts (게시판 글)
+CREATE TABLE IF NOT EXISTS posts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  like_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
+
+-- 9. Post Comments (댓글)
+CREATE TABLE IF NOT EXISTS post_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE post_comments DISABLE ROW LEVEL SECURITY;
+
+-- 10. Post Likes (좋아요, 중복 방지)
+CREATE TABLE IF NOT EXISTS post_likes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID REFERENCES posts(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(post_id, user_id)
+);
+ALTER TABLE post_likes DISABLE ROW LEVEL SECURITY;
+
+-- 11. Seasons 테이블 컬럼 추가 (투표 관리 + 시즌 종료 시각)
+-- 이미 존재하는 경우 무시
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS voting_open BOOLEAN DEFAULT false;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS voting_ends_at TIMESTAMP WITH TIME ZONE;

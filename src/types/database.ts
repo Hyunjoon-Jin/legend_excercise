@@ -21,6 +21,9 @@ export interface Season {
     burning_start_date?: string;
     burning_end_date?: string;
     is_active: boolean;
+    voting_open?: boolean;
+    voting_ends_at?: string;
+    closed_at?: string;
     created_at: string;
 }
 
@@ -64,5 +67,41 @@ export interface MVPPr {
     user_id: string;
     content: string;
     image_url?: string;
+    created_at: string;
+}
+
+export interface ChatMessage {
+    id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    profiles?: Profile;
+}
+
+export interface Post {
+    id: string;
+    user_id: string;
+    title: string;
+    content: string;
+    like_count: number;
+    created_at: string;
+    updated_at: string;
+    profiles?: Profile;
+    comment_count?: number;
+}
+
+export interface PostComment {
+    id: string;
+    post_id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    profiles?: Profile;
+}
+
+export interface PostLike {
+    id: string;
+    post_id: string;
+    user_id: string;
     created_at: string;
 }

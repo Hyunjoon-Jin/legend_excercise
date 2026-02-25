@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { PlusCircle, Calendar, Trophy, User as UserIcon } from "lucide-react";
+import { PlusCircle, Calendar, Trophy, User as UserIcon, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 
@@ -18,6 +18,7 @@ export function BottomNav({ onPlusClick }: BottomNavProps) {
         { id: "cert", label: "인증", icon: PlusCircle, path: "/", isPlus: true, adminOnly: true },
         { id: "calendar", label: "캘린더", icon: Calendar, path: "/calendar" },
         { id: "rankings", label: "랭킹", icon: Trophy, path: "/rankings" },
+        { id: "community", label: "커뮤니티", icon: MessageCircle, path: "/community" },
         { id: "profile", label: "내정보", icon: UserIcon, path: "/profile" },
     ].filter(tab => !tab.adminOnly || user?.role === 'admin');
 
@@ -48,7 +49,7 @@ export function BottomNav({ onPlusClick }: BottomNavProps) {
                             (isActive || (tab.isPlus && pathname === "/")) && tab.isPlus ? "bg-accent/10 text-accent" :
                                 isActive ? "bg-slate-50" : ""
                         )}>
-                            <Icon size={22} className={cn(isActive && !tab.isPlus && "text-accent")} />
+                            <Icon size={20} className={cn(isActive && !tab.isPlus && "text-accent")} />
                         </div>
                         <span className="text-[10px] font-black uppercase tracking-wider">
                             {tab.label}

@@ -15,9 +15,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive } from "@/lib/data";
+import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -83,6 +83,7 @@ export default function AdminPage() {
         start: "",
         end: ""
     });
+    const [votingEndsAt, setVotingEndsAt] = useState<string>("");
 
     useEffect(() => {
         if (activeSeason) {
@@ -90,6 +91,13 @@ export default function AdminPage() {
                 start: activeSeason.burning_start_date || "",
                 end: activeSeason.burning_end_date || ""
             });
+            if (activeSeason.voting_ends_at) {
+                // ISO UTC → datetime-local (local time)
+                const d = new Date(activeSeason.voting_ends_at);
+                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+                    .toISOString().slice(0, 16);
+                setVotingEndsAt(local);
+            }
         }
     }, [activeSeason]);
 
@@ -271,23 +279,12 @@ export default function AdminPage() {
 
     const toggleDate = (date: Date) => {
         const dateStr = format(date, 'yyyy-MM-dd');
-        const hasLog = memberLogs.some(l => l.workout_date === dateStr);
-
-        if (hasLog) {
-            // Toggle for deletion
-            setDatesToDelete(prev =>
-                prev.includes(dateStr)
-                    ? prev.filter(d => d !== dateStr)
-                    : [...prev, dateStr]
-            );
-        } else {
-            // Toggle for addition
-            setDatesToAdd(prev =>
-                prev.some(d => format(d, 'yyyy-MM-dd') === dateStr)
-                    ? prev.filter(d => format(d, 'yyyy-MM-dd') !== dateStr)
-                    : [...prev, date]
-            );
-        }
+        // Always toggle addition (multiple records per day allowed)
+        setDatesToAdd(prev =>
+            prev.some(d => format(d, 'yyyy-MM-dd') === dateStr)
+                ? prev.filter(d => format(d, 'yyyy-MM-dd') !== dateStr)
+                : [...prev, date]
+        );
     };
 
     const handleCreateMember = async () => {
@@ -337,6 +334,43 @@ export default function AdminPage() {
             if (data) setActiveSeason(data);
         } catch (err: any) {
             alert("업데이트 중 오류: " + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleToggleVoting = async (open: boolean) => {
+        if (!activeSeason) return;
+        const msg = open
+            ? `'${activeSeason.name}' 시즌 MVP 투표를 시작하시겠습니까?`
+            : `MVP 투표를 마감하시겠습니까? 마감 후 시즌도 함께 종료됩니다.`;
+        if (!confirm(msg)) return;
+
+        setIsSubmitting(true);
+        try {
+            if (!open) {
+                // Close voting AND end season
+                const { error } = await closeSeason(activeSeason.id);
+                if (error) throw error;
+                alert(`🏁 투표가 마감되고 '${activeSeason.name}' 시즌이 종료되었습니다.\n전체 회원에게 알림이 전송되었습니다.`);
+                setActiveSeason(null);
+                const { data: allSeasons } = await getAllSeasons();
+                if (allSeasons) setSeasons(allSeasons);
+            } else {
+                if (!votingEndsAt) {
+                    alert("투표 종료 시각을 입력해 주세요.");
+                    setIsSubmitting(false);
+                    return;
+                }
+                const endsAtISO = new Date(votingEndsAt).toISOString();
+                const endsAtDate = new Date(votingEndsAt);
+                const { data, error } = await setVotingOpen(activeSeason.id, true, endsAtISO);
+                if (error) throw error;
+                if (data) setActiveSeason(data);
+                alert(`🗳️ MVP 투표가 시작되었습니다!\n종료 시각: ${endsAtDate.toLocaleString('ko-KR')}\n회원들이 투표할 수 있습니다.`);
+            }
+        } catch (err: any) {
+            alert("처리 중 오류: " + err.message);
         } finally {
             setIsSubmitting(false);
         }
@@ -562,13 +596,13 @@ export default function AdminPage() {
                                                         isSelected
                                                             ? "bg-primary text-white border-primary shadow-sm"
                                                             : isAlreadyRegistered
-                                                                ? "bg-slate-100 text-slate-400 border-slate-200 opacity-60"
+                                                                ? "bg-blue-50 text-blue-500 border-blue-200 hover:border-blue-300"
                                                                 : "bg-slate-50 text-slate-500 border-transparent hover:border-slate-200"
                                                     )}
                                                 >
                                                     {m.username}
                                                     {isAlreadyRegistered && !isSelected && (
-                                                        <span className="absolute top-0 right-1 text-[7px] font-black text-slate-400 italic">DONE</span>
+                                                        <span className="absolute top-0 right-1 text-[7px] font-black text-blue-400 italic">+1가능</span>
                                                     )}
                                                 </button>
                                             );
@@ -648,12 +682,11 @@ export default function AdminPage() {
                             <Card className="border-none shadow-sm overflow-hidden bg-white">
                                 <CardHeader className="py-4 border-b border-slate-50 flex flex-row items-center justify-between">
                                     <CardTitle className="text-sm font-black text-slate-700">
-                                        기록 관리 (클릭하여 추가/삭제)
+                                        기록 추가 (날짜 클릭하여 추가)
                                     </CardTitle>
                                     <div className="flex gap-3 text-[10px] font-bold">
                                         <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" />기존</div>
                                         <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" />추가</div>
-                                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500" />삭제</div>
                                     </div>
                                 </CardHeader>
                                 <CardContent className="p-0">
@@ -775,7 +808,7 @@ export default function AdminPage() {
                                                                             </div>
                                                                             <div>
                                                                                 <p className="text-xs font-bold text-slate-700">{format(new Date(log.workout_date), 'MM월 dd일')}</p>
-                                                                                <p className="text-[9px] text-slate-400">{log.workout_type} · {log.duration_minutes}분</p>
+                                                                                <p className="text-[9px] text-slate-400">{log.workout_type === 'gym' ? '운동완료' : log.workout_type === 'running' ? '러닝' : log.workout_type === 'walking' ? '걷기' : log.workout_type === 'yoga' ? '요가' : '스포츠'}</p>
                                                                             </div>
                                                                         </div>
                                                                         <Button
@@ -965,7 +998,82 @@ export default function AdminPage() {
                             </section>
                         )}
 
-                        {/* 3. Season List & Activation */}
+                        {/* 3. MVP Voting Control for Active Season */}
+                        {activeSeason && (
+                            <section className="space-y-4">
+                                <div className="flex items-center gap-2 text-primary">
+                                    <Trophy size={20} className="text-slate-400" />
+                                    <h2 className="text-md font-bold">MVP 투표 관리</h2>
+                                </div>
+                                <Card className="border-none shadow-sm overflow-hidden">
+                                    <CardHeader className="bg-slate-50 border-b border-slate-100 py-3">
+                                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                                            {activeSeason.voting_open ? (
+                                                <>
+                                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                    <span className="text-green-700">투표 진행 중</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="w-2 h-2 rounded-full bg-slate-300" />
+                                                    <span className="text-slate-500">투표 미시작</span>
+                                                </>
+                                            )}
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-6 space-y-4">
+                                        <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                            <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                                                💡 투표를 <strong>시작</strong>하면 회원들이 MVP에 투표할 수 있습니다.<br />
+                                                종료 3시간 전부터 미투표자에게 <strong>긴급 공지</strong>가 표시됩니다.<br />
+                                                투표를 <strong>마감</strong>하면 시즌이 자동 종료되고 전체 알림이 발송됩니다.
+                                            </p>
+                                        </div>
+                                        {!activeSeason.voting_open ? (
+                                            <div className="space-y-3">
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-bold text-slate-500 ml-1">투표 종료 시각 <span className="text-red-400">*</span></Label>
+                                                    <Input
+                                                        type="datetime-local"
+                                                        value={votingEndsAt}
+                                                        onChange={(e) => setVotingEndsAt(e.target.value)}
+                                                        className="h-11 rounded-xl bg-slate-50 border-none"
+                                                    />
+                                                    <p className="text-[10px] text-slate-400 ml-1">종료 3시간 전 미투표자에게 긴급 공지가 자동 표시됩니다.</p>
+                                                </div>
+                                                <Button
+                                                    onClick={() => handleToggleVoting(true)}
+                                                    className="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-sm font-black shadow-lg shadow-blue-100"
+                                                    disabled={isSubmitting || !votingEndsAt}
+                                                >
+                                                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Power size={16} className="mr-2" />투표 시작하기</>}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {activeSeason.voting_ends_at && (
+                                                    <div className="flex items-center justify-between px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
+                                                        <span className="text-[11px] font-bold text-green-700">종료 예정</span>
+                                                        <span className="text-[11px] font-black text-green-600">
+                                                            {new Date(activeSeason.voting_ends_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <Button
+                                                    onClick={() => handleToggleVoting(false)}
+                                                    className="w-full h-12 rounded-xl bg-red-600 hover:bg-red-700 text-sm font-black shadow-lg shadow-red-100"
+                                                    disabled={isSubmitting}
+                                                >
+                                                    {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><StopCircle size={16} className="mr-2" />투표 마감 + 시즌 종료</>}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {/* 4. Season List & Activation */}
                         <section className="space-y-4">
                             <div className="flex items-center gap-2 text-primary">
                                 <CalendarDays size={20} className="text-slate-400" />

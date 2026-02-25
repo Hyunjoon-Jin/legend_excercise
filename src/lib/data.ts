@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -73,6 +73,48 @@ export const toggleSeasonActive = async (seasonId: string) => {
         .select()
         .single();
     return { data, error };
+};
+
+export const setVotingOpen = async (seasonId: string, open: boolean, votingEndsAt?: string) => {
+    const updates: Record<string, any> = { voting_open: open };
+    if (votingEndsAt !== undefined) updates.voting_ends_at = votingEndsAt;
+    const { data, error } = await supabase
+        .from('seasons')
+        .update(updates)
+        .eq('id', seasonId)
+        .select()
+        .single();
+    return { data, error };
+};
+
+export const closeSeason = async (seasonId: string) => {
+    // 1. Close season: deactivate + close voting + set closed_at
+    const now = new Date().toISOString();
+    const { data: seasonData, error: updateError } = await supabase
+        .from('seasons')
+        .update({ is_active: false, voting_open: false, closed_at: now })
+        .eq('id', seasonId)
+        .select()
+        .single();
+    if (updateError) return { data: null, error: updateError };
+
+    // 2. Fetch all member profiles to broadcast notification
+    const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id');
+
+    if (profiles && profiles.length > 0) {
+        const notifications = profiles.map((p: { id: string }) => ({
+            user_id: p.id,
+            title: '🏁 시즌이 종료되었습니다!',
+            content: `MVP 투표가 마감되고 ${seasonData.name} 시즌이 공식 종료되었습니다. 시즌 결과 브리핑을 확인해 보세요!`,
+            is_read: false,
+            link: `/season-result/${seasonId}`,
+        }));
+        await supabase.from('notifications').insert(notifications);
+    }
+
+    return { data: seasonData, error: null };
 };
 
 // --- Workout Logs ---
@@ -329,4 +371,213 @@ export const createNotification = async (notif: Omit<Notification, 'id' | 'creat
         .from('notifications')
         .insert([notif]);
     return { data, error };
+};
+
+// --- Chat ---
+export const getChatMessages = async () => {
+    const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*, profiles(id, username, display_name, avatar_url)')
+        .order('created_at', { ascending: true })
+        .limit(100);
+    return { data: data as ChatMessage[], error };
+};
+
+export const sendChatMessage = async (userId: string, content: string) => {
+    const { data, error } = await supabase
+        .from('chat_messages')
+        .insert([{ user_id: userId, content }])
+        .select('*, profiles(id, username, display_name, avatar_url)')
+        .single();
+    return { data: data as ChatMessage, error };
+};
+
+// --- Posts ---
+export const getPosts = async () => {
+    const { data, error } = await supabase
+        .from('posts')
+        .select(`
+            *,
+            profiles(id, username, display_name, avatar_url),
+            post_comments(count)
+        `)
+        .order('created_at', { ascending: false });
+
+    if (error) return { data: null, error };
+
+    const posts = (data || []).map((p: any) => ({
+        ...p,
+        comment_count: p.post_comments?.[0]?.count ?? 0,
+    })) as Post[];
+
+    return { data: posts, error: null };
+};
+
+export const getPost = async (postId: string) => {
+    const [postRes, commentsRes] = await Promise.all([
+        supabase
+            .from('posts')
+            .select('*, profiles(id, username, display_name, avatar_url)')
+            .eq('id', postId)
+            .single(),
+        supabase
+            .from('post_comments')
+            .select('*, profiles(id, username, display_name, avatar_url)')
+            .eq('post_id', postId)
+            .order('created_at', { ascending: true }),
+    ]);
+    return {
+        data: postRes.data as Post | null,
+        comments: commentsRes.data as PostComment[],
+        error: postRes.error || commentsRes.error,
+    };
+};
+
+export const createPost = async (userId: string, title: string, content: string) => {
+    const { data, error } = await supabase
+        .from('posts')
+        .insert([{ user_id: userId, title, content }])
+        .select()
+        .single();
+    return { data: data as Post, error };
+};
+
+export const deletePost = async (postId: string, userId: string) => {
+    const { data, error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId)
+        .eq('user_id', userId);
+    return { data, error };
+};
+
+export const createComment = async (postId: string, userId: string, content: string) => {
+    const { data, error } = await supabase
+        .from('post_comments')
+        .insert([{ post_id: postId, user_id: userId, content }])
+        .select('*, profiles(id, username, display_name, avatar_url)')
+        .single();
+    return { data: data as PostComment, error };
+};
+
+export const deleteComment = async (commentId: string, userId: string) => {
+    const { data, error } = await supabase
+        .from('post_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', userId);
+    return { data, error };
+};
+
+export const getMyLike = async (postId: string, userId: string) => {
+    const { data, error } = await supabase
+        .from('post_likes')
+        .select('id')
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+        .maybeSingle();
+    return { data, error };
+};
+
+export const toggleLike = async (postId: string, userId: string) => {
+    const { data: existing } = await getMyLike(postId, userId);
+    if (existing) {
+        // Unlike
+        await supabase.from('post_likes').delete().eq('id', existing.id);
+        const { data, error } = await supabase
+            .from('posts')
+            .update({ like_count: supabase.rpc('decrement', { x: 1 }) as any })
+            .eq('id', postId)
+            .select('like_count')
+            .single();
+        // Simpler: just re-count
+        const { count } = await supabase
+            .from('post_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId);
+        await supabase.from('posts').update({ like_count: count ?? 0 }).eq('id', postId);
+        return { liked: false, error: null };
+    } else {
+        // Like
+        await supabase.from('post_likes').insert([{ post_id: postId, user_id: userId }]);
+        const { count } = await supabase
+            .from('post_likes')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId);
+        await supabase.from('posts').update({ like_count: count ?? 0 }).eq('id', postId);
+        return { liked: true, error: null };
+    }
+};
+
+// --- Trophy Stats ---
+export interface TrophyRawStats {
+    logs: { workout_date: string }[];
+    totalVotesReceived: number;
+    mvpWinCount: number;
+}
+
+export const getUserTrophyStats = async (userId: string): Promise<{ data: TrophyRawStats | null; error: any }> => {
+    const [{ data: logs }, { data: myVotes }] = await Promise.all([
+        supabase.from('workout_logs').select('workout_date').eq('user_id', userId).eq('status', 'approved'),
+        supabase.from('votes').select('season_id').eq('candidate_id', userId),
+    ]);
+
+    // 시즌별 득표 수 집계
+    const seasonVotes: Record<string, number> = {};
+    (myVotes || []).forEach(v => { seasonVotes[v.season_id] = (seasonVotes[v.season_id] || 0) + 1; });
+
+    // 시즌별 최다 득표자 확인 → MVP 선정 횟수
+    let mvpWinCount = 0;
+    await Promise.all(Object.entries(seasonVotes).map(async ([seasonId, myCount]) => {
+        const { data: allVotes } = await supabase.from('votes').select('candidate_id').eq('season_id', seasonId);
+        if (!allVotes || allVotes.length === 0) return;
+        const counts: Record<string, number> = {};
+        allVotes.forEach(v => { counts[v.candidate_id] = (counts[v.candidate_id] || 0) + 1; });
+        const maxCount = Math.max(0, ...Object.values(counts));
+        if (myCount >= maxCount && maxCount > 0) mvpWinCount++;
+    }));
+
+    return {
+        data: {
+            logs: (logs || []) as { workout_date: string }[],
+            totalVotesReceived: (myVotes || []).length,
+            mvpWinCount,
+        },
+        error: null,
+    };
+};
+
+// --- Season History ---
+export interface SeasonStat {
+    season: Season;
+    rank: number | null;
+    totalParticipants: number;
+    logCount: number;
+    totalScore: number;
+    workoutPoints: number;
+    mvpPoints: number;
+}
+
+export const getSeasonStatsForUser = async (userId: string): Promise<{ data: SeasonStat[] | null; error: any }> => {
+    const { data: seasons, error } = await getAllSeasons();
+    if (error || !seasons) return { data: null, error };
+
+    const results = await Promise.all(
+        seasons.map(async (season): Promise<SeasonStat> => {
+            const { data: rankings } = await getRankings(season.id);
+            const myIdx = rankings ? rankings.findIndex((r: any) => r.userId === userId) : -1;
+            const myEntry = myIdx >= 0 ? rankings![myIdx] : null;
+            return {
+                season,
+                rank: myIdx >= 0 ? myIdx + 1 : null,
+                totalParticipants: rankings?.length ?? 0,
+                logCount: myEntry?.logCount ?? 0,
+                totalScore: myEntry?.totalScore ?? 0,
+                workoutPoints: myEntry?.workoutPoints ?? 0,
+                mvpPoints: myEntry?.mvpPoints ?? 0,
+            };
+        })
+    );
+
+    return { data: results, error: null };
 };

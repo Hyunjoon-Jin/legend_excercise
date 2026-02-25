@@ -12,7 +12,8 @@ import {
     CheckCircle2,
     X,
     MessageSquare,
-    ExternalLink
+    ExternalLink,
+    Timer,
 } from "lucide-react";
 import {
     Dialog,
@@ -41,8 +42,25 @@ import { cn } from "@/lib/utils";
 import { Profile } from "@/types/database";
 import { supabase } from "@/lib/supabase";
 
-export function MVPVoting() {
+function formatRemaining(ms: number): string {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h > 0) return `${h}시간 ${m}분`;
+    return `${m}분`;
+}
+
+interface MVPVotingProps {
+    votingOpen?: boolean;
+    votingEndsAt?: string;
+}
+
+export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
     const { user } = useAuthStore();
+    const isAdmin = user?.role === 'admin';
+
+    // 남은 시간 계산 (3시간 이내 + 미투표 시 긴급)
+    const msLeft = votingEndsAt ? new Date(votingEndsAt).getTime() - Date.now() : null;
+    const THREE_HOURS = 3 * 60 * 60 * 1000;
     const [candidates, setCandidates] = useState<any[]>([]);
     const [myVotes, setMyVotes] = useState<any[]>([]);
     const [prs, setPrs] = useState<any[]>([]);
@@ -195,11 +213,51 @@ export function MVPVoting() {
                     <Trophy size={20} className="text-secondary-foreground" />
                     <h2 className="text-lg font-bold">이번 시즌 MVP 투표</h2>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1 bg-secondary rounded-full border border-slate-100 shadow-sm">
-                    <span className="text-[10px] font-black text-slate-400">내 투표 현황</span>
-                    <span className="text-xs font-black text-primary">{myVotes.length}<span className="text-slate-300 mx-0.5">/</span>2</span>
-                </div>
+                {votingOpen ? (
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-secondary rounded-full border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-black text-slate-400">내 투표 현황</span>
+                        <span className="text-xs font-black text-primary">{myVotes.length}<span className="text-slate-300 mx-0.5">/</span>2</span>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 rounded-full border border-amber-100">
+                        <AlertCircle size={10} className="text-amber-500" />
+                        <span className="text-[10px] font-black text-amber-600">투표 준비 중</span>
+                    </div>
+                )}
             </div>
+
+            {!votingOpen && (
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-start gap-3">
+                    <AlertCircle size={16} className="text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                        <p className="text-xs font-bold text-amber-800">투표가 아직 시작되지 않았습니다.</p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">관리자가 투표를 시작하면 투표할 수 있습니다.<br />지금은 성과 자랑만 가능합니다.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* 긴급 배너: 투표 진행 중 + 3시간 이내 + 미투표자 */}
+            {votingOpen && !isAdmin && msLeft !== null && msLeft > 0 && msLeft <= THREE_HOURS && myVotes.length < 2 && (
+                <div className="bg-red-600 rounded-2xl p-4 flex items-center gap-3 animate-pulse shadow-lg shadow-red-200">
+                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                        <Timer size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-white leading-tight">⏰ 투표 마감까지 {formatRemaining(msLeft)} 남았어요!</p>
+                        <p className="text-[11px] text-red-100 font-bold mt-0.5">
+                            아직 {2 - myVotes.length}표가 남아 있습니다. 지금 바로 투표해 주세요!
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* 투표 완료 확인 배너: 3시간 이내지만 이미 2표 완료 */}
+            {votingOpen && !isAdmin && msLeft !== null && msLeft > 0 && msLeft <= THREE_HOURS && myVotes.length >= 2 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center gap-2.5">
+                    <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                    <p className="text-xs font-bold text-emerald-700">투표 완료! 마감까지 {formatRemaining(msLeft)} 남았습니다.</p>
+                </div>
+            )}
 
             {/* Step 1: My PR Section */}
             <Card className={cn(
@@ -334,6 +392,11 @@ export function MVPVoting() {
                                     <div className="flex items-center gap-1.5">
                                         <p className="font-bold text-sm text-primary">{c.name}</p>
                                         <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-bold">{c.tier}</span>
+                                        {isAdmin && c.voteCount > 0 && (
+                                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-md font-black">
+                                                {c.voteCount}표
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1">
                                         {cPr ? (
@@ -397,7 +460,7 @@ export function MVPVoting() {
                                             }
                                         }
                                     }}
-                                    disabled={!!isVoting || !!isCancelling || isSelf || (!alreadyVoted && myVotes.length >= 2)}
+                                    disabled={!votingOpen || !!isVoting || !!isCancelling || isSelf || (!alreadyVoted && myVotes.length >= 2)}
                                 >
                                     {isVoting === c.name || isCancelling === c.name ? (
                                         <Loader2 className="animate-spin w-4 h-4" />
