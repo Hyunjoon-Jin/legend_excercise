@@ -84,6 +84,7 @@ export interface Post {
     title: string;
     content: string;
     like_count: number;
+    media_urls?: string[];
     created_at: string;
     updated_at: string;
     profiles?: Profile;

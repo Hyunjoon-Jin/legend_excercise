@@ -433,10 +433,28 @@ export const getPost = async (postId: string) => {
     };
 };
 
-export const createPost = async (userId: string, title: string, content: string) => {
+export const uploadPostMedia = async (file: File, userId: string) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${userId}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const filePath = `post-media/${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, file);
+
+    if (error) return { data: null, error };
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(filePath);
+
+    return { data: publicUrl, error: null };
+};
+
+export const createPost = async (userId: string, title: string, content: string, mediaUrls?: string[]) => {
     const { data, error } = await supabase
         .from('posts')
-        .insert([{ user_id: userId, title, content }])
+        .insert([{ user_id: userId, title, content, media_urls: mediaUrls || [] }])
         .select()
         .single();
     return { data: data as Post, error };

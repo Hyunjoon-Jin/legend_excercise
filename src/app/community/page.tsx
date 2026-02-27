@@ -19,6 +19,7 @@ import {
     deleteComment,
     toggleLike,
     getMyLike,
+    uploadPostMedia,
 } from "@/lib/data";
 import type { ChatMessage, Post, PostComment } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,9 @@ import {
     ChevronLeft,
     Loader2,
     Users,
+    ImagePlus,
+    X,
+    Images,
 } from "lucide-react";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -50,6 +54,43 @@ function isSameDay(a: string, b: string) {
 
 function getDisplayName(profiles?: { display_name?: string; username?: string } | null) {
     return profiles?.display_name || profiles?.username || "알 수 없음";
+}
+
+function isVideoUrl(url: string) {
+    return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+}
+
+// ─── Media Gallery ────────────────────────────────────────────────────────────
+function MediaGallery({ urls }: { urls: string[] }) {
+    if (!urls || urls.length === 0) return null;
+    return (
+        <div className={cn("mt-3 grid gap-1.5", urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+            {urls.map((url, i) =>
+                isVideoUrl(url) ? (
+                    <video
+                        key={i}
+                        src={url}
+                        controls
+                        className={cn(
+                            "w-full rounded-xl bg-black",
+                            urls.length === 1 ? "max-h-80" : "aspect-square object-cover"
+                        )}
+                    />
+                ) : (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                        <img
+                            src={url}
+                            alt=""
+                            className={cn(
+                                "w-full rounded-xl object-cover",
+                                urls.length === 1 ? "max-h-80" : "aspect-square"
+                            )}
+                        />
+                    </a>
+                )
+            )}
+        </div>
+    );
 }
 
 // ─── Chat Tab ─────────────────────────────────────────────────────────────────
@@ -74,7 +115,6 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                 "postgres_changes",
                 { event: "INSERT", schema: "public", table: "chat_messages" },
                 async (payload) => {
-                    // Fetch with profile join
                     const { data } = await supabase
                         .from("chat_messages")
                         .select("*, profiles(id, username, display_name, avatar_url)")
@@ -82,7 +122,6 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                         .single();
                     if (data) {
                         setMessages((prev) => {
-                            // Avoid duplicate if we already added it optimistically
                             if (prev.some((m) => m.id === data.id)) return prev;
                             return [...prev, data as ChatMessage];
                         });
@@ -147,7 +186,6 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                                     isMe ? "flex-row-reverse" : "flex-row"
                                 )}
                             >
-                                {/* Avatar placeholder */}
                                 {!isMe && showSender && (
                                     <div className="w-7 h-7 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-700 shrink-0">
                                         {getDisplayName(msg.profiles).charAt(0).toUpperCase()}
@@ -309,6 +347,10 @@ function PostDetail({
                         </div>
                     </div>
                     <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+
+                    {/* Media Gallery */}
+                    <MediaGallery urls={post.media_urls || []} />
+
                     <button
                         onClick={handleLike}
                         className={cn(
@@ -397,6 +439,12 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
     const [content, setContent] = useState("");
     const [submitting, setSubmitting] = useState(false);
 
+    // Media attachment state
+    const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+    const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const loadPosts = async () => {
         setLoading(true);
         const { data } = await getPosts();
@@ -408,14 +456,46 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
         loadPosts();
     }, []);
 
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selected = Array.from(e.target.files || []);
+        const remaining = 10 - mediaFiles.length;
+        const toAdd = selected.slice(0, remaining);
+        setMediaFiles((prev) => [...prev, ...toAdd]);
+        setPreviewUrls((prev) => [...prev, ...toAdd.map((f) => URL.createObjectURL(f))]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const removeMedia = (idx: number) => {
+        URL.revokeObjectURL(previewUrls[idx]);
+        setMediaFiles((prev) => prev.filter((_, i) => i !== idx));
+        setPreviewUrls((prev) => prev.filter((_, i) => i !== idx));
+    };
+
+    const resetForm = () => {
+        setTitle("");
+        setContent("");
+        previewUrls.forEach((url) => URL.revokeObjectURL(url));
+        setMediaFiles([]);
+        setPreviewUrls([]);
+    };
+
     const handleCreate = async () => {
         if (!title.trim() || !content.trim() || submitting) return;
         setSubmitting(true);
-        const { data } = await createPost(userId, title.trim(), content.trim());
+
+        // Upload media files
+        let uploadedUrls: string[] = [];
+        if (mediaFiles.length > 0) {
+            setUploading(true);
+            const results = await Promise.all(mediaFiles.map((f) => uploadPostMedia(f, userId)));
+            uploadedUrls = results.filter((r) => r.data).map((r) => r.data as string);
+            setUploading(false);
+        }
+
+        const { data } = await createPost(userId, title.trim(), content.trim(), uploadedUrls);
         if (data) {
             setShowWrite(false);
-            setTitle("");
-            setContent("");
+            resetForm();
             await loadPosts();
         }
         setSubmitting(false);
@@ -475,11 +555,27 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                                 <p className="text-xs text-slate-400 line-clamp-2 mb-2">
                                     {post.content}
                                 </p>
+                                {/* First image thumbnail */}
+                                {post.media_urls && post.media_urls.length > 0 && !isVideoUrl(post.media_urls[0]) && (
+                                    <div className="mb-2 rounded-lg overflow-hidden h-32 bg-slate-100">
+                                        <img
+                                            src={post.media_urls[0]}
+                                            alt=""
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-3 text-xs text-slate-400">
                                     <span className="font-medium text-slate-500">
                                         {getDisplayName(post.profiles)}
                                     </span>
                                     <span>{formatDate(post.created_at)}</span>
+                                    {post.media_urls && post.media_urls.length > 0 && (
+                                        <span className="flex items-center gap-0.5 text-amber-400">
+                                            <Images size={11} />
+                                            {post.media_urls.length}
+                                        </span>
+                                    )}
                                     <span className="flex items-center gap-0.5 ml-auto">
                                         <Heart size={11} />
                                         {post.like_count}
@@ -496,8 +592,14 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
             </div>
 
             {/* Write Dialog */}
-            <Dialog open={showWrite} onOpenChange={setShowWrite}>
-                <DialogContent className="max-w-[440px] mx-auto">
+            <Dialog
+                open={showWrite}
+                onOpenChange={(open) => {
+                    setShowWrite(open);
+                    if (!open) resetForm();
+                }}
+            >
+                <DialogContent className="max-w-[440px] mx-auto max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>글쓰기</DialogTitle>
                     </DialogHeader>
@@ -512,14 +614,78 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                             placeholder="내용을 입력하세요..."
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
-                            rows={6}
+                            rows={5}
                             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
                         />
+
+                        {/* Media Previews */}
+                        {previewUrls.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2">
+                                {previewUrls.map((url, i) => (
+                                    <div key={i} className="relative aspect-square">
+                                        {mediaFiles[i]?.type.startsWith("video/") ? (
+                                            <video
+                                                src={url}
+                                                className="w-full h-full object-cover rounded-lg bg-black"
+                                            />
+                                        ) : (
+                                            <img
+                                                src={url}
+                                                alt=""
+                                                className="w-full h-full object-cover rounded-lg"
+                                            />
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeMedia(i)}
+                                            className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {previewUrls.length < 10 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="aspect-square border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-300 hover:border-amber-300 hover:text-amber-400 transition-colors"
+                                    >
+                                        <ImagePlus size={20} />
+                                        <span className="text-[10px] mt-1">추가</span>
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Add Media Button (empty state) */}
+                        {previewUrls.length === 0 && (
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:border-amber-300 hover:text-amber-400 transition-colors text-sm"
+                            >
+                                <ImagePlus size={16} />
+                                사진/영상 첨부 (최대 10개)
+                            </button>
+                        )}
+
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            onChange={handleFileSelect}
+                            className="hidden"
+                        />
+
                         <div className="flex gap-2 justify-end">
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setShowWrite(false)}
+                                onClick={() => {
+                                    setShowWrite(false);
+                                    resetForm();
+                                }}
                             >
                                 취소
                             </Button>
@@ -529,8 +695,12 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                                 disabled={!title.trim() || !content.trim() || submitting}
                                 className="bg-amber-400 hover:bg-amber-500 text-white"
                             >
-                                {submitting ? <Loader2 size={14} className="animate-spin mr-1" /> : null}
-                                등록
+                                {(submitting || uploading) ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin mr-1" />
+                                        {uploading ? "업로드 중..." : "등록 중..."}
+                                    </>
+                                ) : "등록"}
                             </Button>
                         </div>
                     </div>
@@ -578,7 +748,7 @@ export default function CommunityPage() {
                 </div>
             </div>
 
-            {/* Content area — takes remaining height above bottom nav */}
+            {/* Content area */}
             <div className="flex-1 overflow-hidden flex flex-col" style={{ marginBottom: "80px" }}>
                 {tab === "chat" ? (
                     <ChatTab userId={user.id} isAdmin={isAdmin} />
