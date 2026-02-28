@@ -443,7 +443,7 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                                     <div className="flex items-center gap-1.5">
                                         <p className="font-bold text-sm text-primary">{c.name}</p>
                                         <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-400 rounded-md font-bold">{c.tier}</span>
-                                        {isAdmin && c.voteCount > 0 && (
+                                        {isAdmin && !votingOpen && c.voteCount > 0 && (
                                             <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-md font-black">
                                                 {c.voteCount}표
                                             </span>

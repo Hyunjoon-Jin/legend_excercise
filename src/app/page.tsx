@@ -12,18 +12,20 @@ import {
   PlusCircle,
   Calendar,
   ChevronRight,
+  ChevronLeft,
   LogOut,
   Bell,
   BookOpen,
-  Star
+  Star,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes } from "@/lib/data";
-import { Profile, Season, WorkoutLog, Notification } from "@/types/database";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs } from "@/lib/data";
+import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import { format, startOfWeek, endOfWeek, isWithinInterval } from "date-fns";
+import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
 import { ko } from "date-fns/locale";
 
 export default function DashboardPage() {
@@ -42,6 +44,14 @@ export default function DashboardPage() {
   const [myVoteCount, setMyVoteCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [votingMsLeftLive, setVotingMsLeftLive] = useState<number | null>(null);
+  const [allLogs, setAllLogs] = useState<WorkoutLog[]>([]);
+  const [memberDetail, setMemberDetail] = useState<{
+    userId: string; name: string; tier: string;
+    totalScore: number; workoutPoints: number; logCount: number;
+  } | null>(null);
+  const [memberPr, setMemberPr] = useState<MVPPr | null>(null);
+  const [isLoadingModal, setIsLoadingModal] = useState(false);
+  const [modalMonth, setModalMonth] = useState(new Date());
 
   useEffect(() => {
     setIsMounted(true);
@@ -92,6 +102,7 @@ export default function DashboardPage() {
       }
       if (rankRes?.data) setRankings(rankRes.data);
       if (logsRes?.data) {
+        setAllLogs(logsRes.data);
         setMyLogs(logsRes.data.filter((log: any) => log.user_id === user?.id));
       }
       setIsLoading(false);
@@ -118,8 +129,8 @@ export default function DashboardPage() {
   }
 
   const isAdmin = user?.role === 'admin';
-  // 투표 진행 중 + 비관리자 → 투표 집계 비공개
-  const votingActive = !isAdmin && !!(activeSeason?.is_active && activeSeason?.voting_open);
+  // 투표 진행 중 → 투표 집계 비공개 (관리자 포함)
+  const votingActive = !!(activeSeason?.voting_open);
 
   // 투표 긴급 공지: 종료 3시간 이내 + 미투표
   const votingMsLeft = activeSeason?.voting_ends_at
@@ -138,6 +149,25 @@ export default function DashboardPage() {
     const m = Math.floor((ms % 3600000) / 60000);
     return h > 0 ? `${h}시간 ${m}분` : `${m}분`;
   }
+
+  const openMemberDetail = async (item: any) => {
+    setMemberDetail({
+      userId: item.userId,
+      name: item.name,
+      tier: item.tier,
+      totalScore: item.totalScore,
+      workoutPoints: item.workoutPoints,
+      logCount: item.logCount,
+    });
+    setModalMonth(new Date());
+    setMemberPr(null);
+    if (activeSeason) {
+      setIsLoadingModal(true);
+      const { data: prs } = await getMVPPrs(activeSeason.id);
+      setMemberPr(prs?.find(p => p.user_id === item.userId) ?? null);
+      setIsLoadingModal(false);
+    }
+  };
 
   const approvedCount = myLogs.filter(l => l.status === 'approved').length;
 
@@ -449,9 +479,13 @@ export default function DashboardPage() {
                 ? [...rankings].sort((a, b) => b.logCount - a.logCount)
                 : rankings
               ).slice(0, 5).map((item, idx) => (
-                <div key={item.name} className="flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm">
+                <button
+                  key={item.userId ?? item.name}
+                  onClick={() => openMemberDetail(item)}
+                  className="w-full flex items-center gap-3 p-3 bg-white rounded-xl shadow-sm active:scale-[0.98] transition-transform text-left"
+                >
                   <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs",
+                    "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0",
                     idx === 0 ? "bg-amber-100 text-amber-600" :
                       idx === 1 ? "bg-slate-100 text-slate-500" :
                         idx === 2 ? "bg-orange-50 text-orange-600" :
@@ -459,17 +493,17 @@ export default function DashboardPage() {
                   )}>
                     {idx + 1}
                   </div>
-                  <div className="flex-1 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-primary text-sm">{item.name}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded-md">{item.tier}</span>
+                  <div className="flex-1 flex items-center justify-between min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-primary text-sm truncate">{item.name}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-50 text-slate-400 rounded-md shrink-0">{item.tier}</span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right">
                         {votingActive ? (
                           <>
                             <p className="text-xs font-black text-primary leading-none">{item.logCount}회</p>
-                            <p className="text-[8px] text-indigo-400 font-bold mt-0.5">인증 횟수</p>
+                            <p className="text-[8px] text-slate-400 mt-0.5">{item.workoutPoints}점</p>
                           </>
                         ) : (
                           <>
@@ -481,7 +515,7 @@ export default function DashboardPage() {
                       <ChevronRight size={14} className="text-slate-300" />
                     </div>
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <div className="p-8 text-center bg-white rounded-2xl">
@@ -523,6 +557,126 @@ export default function DashboardPage() {
           </Button>
         )}
       </main>
+
+      {/* Member Detail Modal */}
+      {memberDetail && (
+        <div className="fixed inset-0 z-50 flex items-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMemberDetail(null)} />
+          <div className="relative w-full bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-3xl">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-lg text-primary">{memberDetail.name}</span>
+                <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold">{memberDetail.tier}</span>
+              </div>
+              <button onClick={() => setMemberDetail(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X size={20} className="text-slate-500" />
+              </button>
+            </div>
+
+            {/* Stats */}
+            <div className="px-6 pt-4 pb-2 flex gap-3">
+              <div className="flex-1 bg-slate-50 rounded-2xl p-3 text-center">
+                <p className="text-xl font-black text-primary">{memberDetail.logCount}회</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">인증 횟수</p>
+              </div>
+              <div className="flex-1 bg-amber-50 rounded-2xl p-3 text-center">
+                <p className="text-xl font-black text-accent">
+                  {votingActive ? memberDetail.workoutPoints : memberDetail.totalScore}점
+                </p>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                  {votingActive ? '인증 점수' : '종합 점수'}
+                </p>
+              </div>
+            </div>
+
+            {/* Calendar */}
+            <div className="px-6 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-bold text-primary text-sm">
+                  {format(modalMonth, "yyyy년 M월", { locale: ko })}
+                </span>
+                <div className="flex gap-1">
+                  <button onClick={() => setModalMonth(subMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                    <ChevronLeft size={18} className="text-slate-500" />
+                  </button>
+                  <button onClick={() => setModalMonth(addMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                    <ChevronRight size={18} className="text-slate-500" />
+                  </button>
+                </div>
+              </div>
+              {(() => {
+                const memberLogsForCalendar = allLogs.filter(
+                  l => l.user_id === memberDetail.userId && l.status === 'approved'
+                );
+                const calDays = eachDayOfInterval({
+                  start: startOfWeek(startOfMonth(modalMonth)),
+                  end: endOfWeek(endOfMonth(modalMonth)),
+                });
+                return (
+                  <>
+                    <div className="grid grid-cols-7 mb-1">
+                      {["일","월","화","수","목","금","토"].map(d => (
+                        <div key={d} className="text-center text-[10px] font-bold text-slate-400 py-1">{d}</div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-[1px] bg-slate-100 rounded-xl overflow-hidden">
+                      {calDays.map((day, i) => {
+                        const dayLogs = memberLogsForCalendar.filter(l => isSameDay(new Date(l.workout_date), day));
+                        const inThisMonth = isSameMonth(day, modalMonth);
+                        const hasWorkout = dayLogs.length > 0 && inThisMonth;
+                        return (
+                          <div key={i} className={cn(
+                            "aspect-square flex flex-col items-center justify-center",
+                            hasWorkout ? "bg-amber-50" : "bg-white"
+                          )}>
+                            <span className={cn(
+                              "w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium",
+                              hasWorkout ? "bg-accent text-white font-bold text-[10px]" :
+                                !inThisMonth ? "text-slate-300" : "text-slate-700"
+                            )}>
+                              {format(day, "d")}
+                            </span>
+                            {hasWorkout && (
+                              <span className="text-[8px] font-black text-accent leading-none mt-0.5">
+                                {dayLogs.length > 1 ? `${dayLogs.length}회` : "✓"}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* MVP PR (성과 자랑) */}
+            <div className="px-6 pb-8">
+              <h4 className="font-bold text-sm text-primary mb-3 flex items-center gap-2">
+                <Star size={14} className="text-accent" />
+                이번 시즌 성과 자랑
+              </h4>
+              {isLoadingModal ? (
+                <div className="h-20 bg-slate-50 animate-pulse rounded-xl" />
+              ) : memberPr ? (
+                <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-100">
+                  {memberPr.image_url && (
+                    <img
+                      src={memberPr.image_url}
+                      alt="PR 이미지"
+                      className="w-full rounded-xl mb-3 max-h-48 object-cover"
+                    />
+                  )}
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{memberPr.content}</p>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-6 bg-slate-50 rounded-xl">아직 성과 자랑을 작성하지 않았어요.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav onPlusClick={() => setShowCertModal(true)} />
 

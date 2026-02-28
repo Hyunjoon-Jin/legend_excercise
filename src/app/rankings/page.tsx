@@ -243,8 +243,8 @@ export default function RankingsPage() {
     };
 
     const isAdmin = user?.role === 'admin';
-    // 투표 진행 중 + 비관리자 → 투표 데이터 비공개
-    const votingActive = !isAdmin && !!(selectedSeason?.is_active && selectedSeason?.voting_open);
+    // 투표 진행 중이면 관리자 포함 전원 투표 점수 비공개
+    const votingActive = !!(selectedSeason?.voting_open);
 
     // 투표 진행 중에는 workoutPoints 기준으로 재정렬
     const displayRankings = useMemo(() => {
