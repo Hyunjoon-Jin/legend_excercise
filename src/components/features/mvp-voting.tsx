@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     Trophy,
     User as UserIcon,
@@ -14,6 +14,7 @@ import {
     MessageSquare,
     ExternalLink,
     Timer,
+    ImagePlus,
 } from "lucide-react";
 import {
     Dialog,
@@ -41,6 +42,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Profile } from "@/types/database";
 import { supabase } from "@/lib/supabase";
+
+function isVideoUrl(url: string) {
+    return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+}
+
+function getPrMediaUrls(imageUrl?: string): string[] {
+    if (!imageUrl) return [];
+    try { const p = JSON.parse(imageUrl); if (Array.isArray(p)) return p; } catch {}
+    return [imageUrl];
+}
 
 function formatRemaining(ms: number): string {
     const h = Math.floor(ms / 3600000);
@@ -81,7 +92,10 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
 
     // Self PR Form
     const [myPr, setMyPr] = useState<{ content: string; image_url: string }>({ content: "", image_url: "" });
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [newFilePreviews, setNewFilePreviews] = useState<string[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [isSubmittingPr, setIsSubmittingPr] = useState(false);
     const [showPrForm, setShowPrForm] = useState(false);
 
@@ -110,6 +124,9 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                     const userPr = prsRes.data.find(p => p.user_id === user.id);
                     if (userPr) {
                         setMyPr({ content: userPr.content, image_url: userPr.image_url || "" });
+                        setExistingMediaUrls(getPrMediaUrls(userPr.image_url));
+                        setSelectedFiles([]);
+                        setNewFilePreviews([]);
                         setShowPrForm(false);
                     } else {
                         setShowPrForm(true);
@@ -178,34 +195,45 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
 
         setIsSubmittingPr(true);
         try {
-            let uploadedUrl = myPr.image_url;
-
-            // 1. Upload image if a new file is selected
-            if (selectedFile) {
-                const { data: publicUrl, error: uploadError } = await uploadMVPImage(selectedFile, user.id);
-                if (uploadError) {
-                    throw new Error("이미지 업로드 실패: " + uploadError.message);
-                }
-                uploadedUrl = publicUrl || "";
+            // 1. Upload new files
+            let newlyUploadedUrls: string[] = [];
+            if (selectedFiles.length > 0) {
+                const results = await Promise.all(selectedFiles.map(f => uploadMVPImage(f, user.id)));
+                newlyUploadedUrls = results.filter(r => r.data).map(r => r.data as string);
             }
 
-            // 2. Submit PR
+            // 2. Combine existing (not removed) + new
+            const allUrls = [...existingMediaUrls, ...newlyUploadedUrls];
+            const imageUrlToSave = allUrls.length === 0 ? ""
+                : allUrls.length === 1 ? allUrls[0]
+                : JSON.stringify(allUrls);
+
+            // 3. Submit PR
             const { error } = await submitMVPPr({
                 season_id: activeSeasonId,
                 user_id: user.id,
                 content: myPr.content,
-                image_url: uploadedUrl
+                image_url: imageUrlToSave
             });
 
             if (error) throw error;
 
             alert("이번 시즌 성과 PR이 등록되었습니다!");
+            newFilePreviews.forEach(url => URL.revokeObjectURL(url));
+            setSelectedFiles([]);
+            setNewFilePreviews([]);
             setShowPrForm(false);
-            setSelectedFile(null);
 
-            // Refresh PRS
+            // Refresh PRs
             const { data } = await getMVPPrs(activeSeasonId);
-            if (data) setPrs(data);
+            if (data) {
+                setPrs(data);
+                const userPr = data.find(p => p.user_id === user.id);
+                if (userPr) {
+                    setMyPr({ content: userPr.content, image_url: userPr.image_url || "" });
+                    setExistingMediaUrls(getPrMediaUrls(userPr.image_url));
+                }
+            }
         } catch (err: any) {
             alert("등록 중 오류: " + err.message);
         } finally {
@@ -324,55 +352,72 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                             </div>
                             <div className="space-y-3">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">성과 설명 (한 줄 추천)</Label>
-                                    <Input
-                                        placeholder="어떤 성과를 내셨나요? (예: 러닝 100km 달성!)"
+                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">성과 설명</Label>
+                                    <textarea
+                                        placeholder="어떤 성과를 내셨나요? (예: 러닝 100km 달성!&#10;자유롭게 여러 줄로 작성하세요)"
                                         value={myPr.content}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMyPr({ ...myPr, content: e.target.value })}
-                                        className="h-10 rounded-xl bg-white border-white shadow-inner text-sm"
+                                        onChange={(e) => setMyPr({ ...myPr, content: e.target.value })}
+                                        rows={4}
+                                        className="w-full rounded-xl bg-white border-0 shadow-inner text-sm px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-amber-300 placeholder:text-slate-400"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">인증 사진 첨부 (선택)</Label>
-                                    <div className="flex flex-col gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex-1 relative">
-                                                <ImageIcon size={14} className="absolute left-3 top-3 text-slate-300" />
-                                                <input
-                                                    type="file"
-                                                    accept="image/*"
-                                                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                                                    className="hidden"
-                                                    id="mvp-image-upload"
-                                                />
-                                                <label
-                                                    htmlFor="mvp-image-upload"
-                                                    className="flex h-10 w-full rounded-xl bg-white border-white shadow-inner text-xs items-center pl-9 cursor-pointer text-slate-400 font-medium hover:bg-slate-50 transition-colors overflow-hidden truncate"
-                                                >
-                                                    {selectedFile ? selectedFile.name : (myPr.image_url ? "사진이 이미 등록되어 있습니다" : "사진 파일을 선택하세요")}
-                                                </label>
-                                            </div>
-                                            {(selectedFile || myPr.image_url) && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => { setSelectedFile(null); setMyPr({ ...myPr, image_url: "" }) }}
-                                                    className="h-10 w-10 p-0 rounded-xl bg-white text-slate-400 hover:text-red-500"
-                                                >
-                                                    <X size={16} />
-                                                </Button>
+                                    <Label className="text-[11px] font-bold text-slate-500 ml-1">사진/영상 첨부 (선택, 최대 5개)</Label>
+                                    {(existingMediaUrls.length + selectedFiles.length > 0) && (
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {existingMediaUrls.map((url, i) => (
+                                                <div key={`e-${i}`} className="relative aspect-square">
+                                                    {isVideoUrl(url) ? (
+                                                        <video src={url} className="w-full h-full object-cover rounded-lg bg-black" />
+                                                    ) : (
+                                                        <img src={url} alt="" className="w-full h-full object-cover rounded-lg" />
+                                                    )}
+                                                    <button type="button" onClick={() => setExistingMediaUrls(prev => prev.filter((_, j) => j !== i))} className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center text-white">
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {newFilePreviews.map((url, i) => (
+                                                <div key={`n-${i}`} className="relative aspect-square">
+                                                    {selectedFiles[i]?.type.startsWith("video/") ? (
+                                                        <video src={url} className="w-full h-full object-cover rounded-lg bg-black" />
+                                                    ) : (
+                                                        <img src={url} alt="" className="w-full h-full object-cover rounded-lg" />
+                                                    )}
+                                                    <button type="button" onClick={() => { URL.revokeObjectURL(url); setSelectedFiles(prev => prev.filter((_, j) => j !== i)); setNewFilePreviews(prev => prev.filter((_, j) => j !== i)); }} className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center text-white">
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {existingMediaUrls.length + selectedFiles.length < 5 && (
+                                                <button type="button" onClick={() => fileInputRef.current?.click()} className="aspect-square border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-300 hover:border-amber-300 hover:text-amber-400 transition-colors">
+                                                    <ImagePlus size={18} />
+                                                    <span className="text-[10px] mt-1">추가</span>
+                                                </button>
                                             )}
                                         </div>
-                                        {(selectedFile || myPr.image_url) && (
-                                            <div className="w-20 h-20 rounded-xl border border-slate-100 overflow-hidden bg-white shadow-sm">
-                                                <img
-                                                    src={selectedFile ? URL.createObjectURL(selectedFile) : myPr.image_url}
-                                                    className="w-full h-full object-cover"
-                                                    alt="preview"
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
+                                    )}
+                                    {existingMediaUrls.length + selectedFiles.length === 0 && (
+                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-2 text-slate-400 hover:border-amber-300 hover:text-amber-400 transition-colors text-xs">
+                                            <ImagePlus size={14} />
+                                            사진/영상 첨부 (최대 5개)
+                                        </button>
+                                    )}
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        multiple
+                                        accept="image/*,video/*"
+                                        onChange={(e) => {
+                                            const sel = Array.from(e.target.files || []);
+                                            const remaining = 5 - existingMediaUrls.length - selectedFiles.length;
+                                            const toAdd = sel.slice(0, remaining);
+                                            setSelectedFiles(prev => [...prev, ...toAdd]);
+                                            setNewFilePreviews(prev => [...prev, ...toAdd.map(f => URL.createObjectURL(f))]);
+                                            if (fileInputRef.current) fileInputRef.current.value = "";
+                                        }}
+                                        className="hidden"
+                                    />
                                 </div>
                                 <Button
                                     onClick={handlePrSubmit}
@@ -427,8 +472,8 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                             <div className="flex items-center gap-3">
                                 <div className="relative">
                                     <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 border border-slate-50">
-                                        {cPr?.image_url ? (
-                                            <img src={cPr.image_url} alt={c.name} className="w-full h-full rounded-full object-cover" />
+                                        {getPrMediaUrls(cPr?.image_url)[0] ? (
+                                            <img src={getPrMediaUrls(cPr?.image_url)[0]} alt={c.name} className="w-full h-full rounded-full object-cover" />
                                         ) : (
                                             <UserIcon size={24} />
                                         )}
@@ -459,15 +504,24 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                                                 </DialogTrigger>
                                                 <DialogContent className="max-w-[340px] rounded-3xl border-none p-0 overflow-hidden bg-white">
                                                     <div className="relative">
-                                                        {cPr.image_url ? (
-                                                            <div className="aspect-video w-full bg-slate-100">
-                                                                <img src={cPr.image_url} alt="achievement" className="w-full h-full object-cover" />
-                                                            </div>
-                                                        ) : (
-                                                            <div className="aspect-video w-full bg-primary/5 flex items-center justify-center text-primary/20">
-                                                                <ImageIcon size={48} />
-                                                            </div>
-                                                        )}
+                                                        {(() => {
+                                                            const mediaUrls = getPrMediaUrls(cPr.image_url);
+                                                            return mediaUrls.length > 0 ? (
+                                                                <div className={cn("grid gap-1", mediaUrls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+                                                                    {mediaUrls.map((url, mi) =>
+                                                                        isVideoUrl(url) ? (
+                                                                            <video key={mi} src={url} controls className="w-full bg-black" />
+                                                                        ) : (
+                                                                            <img key={mi} src={url} alt="" className="w-full object-contain bg-slate-100" />
+                                                                        )
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="aspect-video w-full bg-primary/5 flex items-center justify-center text-primary/20">
+                                                                    <ImageIcon size={48} />
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         <div className="p-6 space-y-4">
                                                             <div className="flex items-center gap-3">
                                                                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">

@@ -560,9 +560,10 @@ export default function DashboardPage() {
 
       {/* Member Detail Modal */}
       {memberDetail && (
-        <div className="fixed inset-0 z-50 flex items-end">
+        <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMemberDetail(null)} />
-          <div className="relative w-full bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 shadow-2xl">
+          <div className="absolute inset-x-0 bottom-0 flex justify-center pointer-events-none">
+          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 shadow-2xl pointer-events-auto">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-3xl">
               <div className="flex items-center gap-2">
@@ -661,19 +662,33 @@ export default function DashboardPage() {
                 <div className="h-20 bg-slate-50 animate-pulse rounded-xl" />
               ) : memberPr ? (
                 <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-100">
-                  {memberPr.image_url && (
-                    <img
-                      src={memberPr.image_url}
-                      alt="PR 이미지"
-                      className="w-full rounded-xl mb-3 max-h-48 object-cover"
-                    />
-                  )}
+                  {(() => {
+                    const getPrUrls = (imageUrl?: string): string[] => {
+                      if (!imageUrl) return [];
+                      try { const p = JSON.parse(imageUrl); if (Array.isArray(p)) return p; } catch {}
+                      return [imageUrl];
+                    };
+                    const isVid = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+                    const urls = getPrUrls(memberPr.image_url);
+                    return urls.length > 0 ? (
+                      <div className={cn("grid gap-2 mb-3", urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+                        {urls.map((url, i) =>
+                          isVid(url) ? (
+                            <video key={i} src={url} controls className="w-full rounded-xl bg-black" />
+                          ) : (
+                            <img key={i} src={url} alt="" className="w-full rounded-xl object-contain bg-slate-100" />
+                          )
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">{memberPr.content}</p>
                 </div>
               ) : (
                 <p className="text-sm text-slate-400 text-center py-6 bg-slate-50 rounded-xl">아직 성과 자랑을 작성하지 않았어요.</p>
               )}
             </div>
+          </div>
           </div>
         </div>
       )}
