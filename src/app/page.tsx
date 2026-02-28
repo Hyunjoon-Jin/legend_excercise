@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [myVoteCount, setMyVoteCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [votingMsLeftLive, setVotingMsLeftLive] = useState<number | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -98,6 +99,19 @@ export default function DashboardPage() {
 
     fetchData();
   }, [isAuthenticated, router, user?.id]);
+
+  // 1초 단위 카운트다운 (투표 진행 중일 때만)
+  useEffect(() => {
+    if (!activeSeason?.voting_open || !activeSeason?.voting_ends_at) {
+      setVotingMsLeftLive(null);
+      return;
+    }
+    const endsAt = activeSeason.voting_ends_at;
+    const update = () => setVotingMsLeftLive(new Date(endsAt).getTime() - Date.now());
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [activeSeason?.voting_open, activeSeason?.voting_ends_at]);
 
   if (!isMounted || !isAuthenticated || !user) {
     return null;
@@ -348,24 +362,60 @@ export default function DashboardPage() {
         {activeSeason && (
           <div
             onClick={() => router.push("/mvp")}
-            className="bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-5 rounded-3xl text-white shadow-lg shadow-amber-100 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group"
+            className="bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 p-5 rounded-3xl text-white shadow-lg shadow-amber-100 active:scale-[0.98] transition-all cursor-pointer relative overflow-hidden group"
           >
-            <div className="relative z-10">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Star size={12} className="text-white fill-white animate-pulse" />
-                <span className="text-[10px] font-black italic tracking-widest text-white/80">COMMUNITY</span>
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Star size={12} className="text-white fill-white animate-pulse" />
+                  <span className="text-[10px] font-black italic tracking-widest text-white/80">COMMUNITY</span>
+                </div>
+                <h3 className="text-lg font-black italic leading-tight">
+                  MVP 투표 / <br />내 성과 자랑하러 가기
+                </h3>
+                <p className="text-[10px] text-white/70 font-bold mt-1.5 flex items-center gap-1">
+                  지금 1위 후보들의 비결 확인하기 <ChevronRight size={10} />
+                </p>
               </div>
-              <h3 className="text-lg font-black italic leading-tight">
-                MVP 투표 / <br />내 성과 자랑하러 가기
-              </h3>
-              <p className="text-[10px] text-white/70 font-bold mt-1.5 flex items-center gap-1">
-                지금 1위 후보들의 비결 확인하기 <ChevronRight size={10} />
-              </p>
+              <div className="relative z-10 bg-white/20 p-3 rounded-2xl backdrop-blur-sm group-hover:bg-white/30 transition-colors shrink-0">
+                <Trophy size={32} className="text-white drop-shadow-md" />
+              </div>
             </div>
-            <div className="relative z-10 bg-white/20 p-3 rounded-2xl backdrop-blur-sm group-hover:bg-white/30 transition-colors">
-              <Trophy size={32} className="text-white drop-shadow-md" />
-            </div>
-            {/* Decoration */}
+
+            {/* 투표 종료 카운트다운 */}
+            {activeSeason.voting_open && votingMsLeftLive !== null && votingMsLeftLive > 0 && (
+              <div className="relative z-10 mt-4 pt-3 border-t border-white/25">
+                <p className="text-[9px] font-black text-white/60 tracking-widest mb-2">투표 마감까지 남은 시간</p>
+                <div className="flex items-end gap-1.5">
+                  {(() => {
+                    const totalSec = Math.max(0, Math.floor(votingMsLeftLive / 1000));
+                    const d = Math.floor(totalSec / 86400);
+                    const h = Math.floor((totalSec % 86400) / 3600);
+                    const m = Math.floor((totalSec % 3600) / 60);
+                    const s = totalSec % 60;
+                    const units = d > 0
+                      ? [{ v: d, label: '일' }, { v: h, label: '시' }, { v: m, label: '분' }]
+                      : [{ v: h, label: '시' }, { v: m, label: '분' }, { v: s, label: '초' }];
+                    return units.map((u, i) => (
+                      <div key={i} className="flex items-end gap-1.5">
+                        <div className="flex flex-col items-center">
+                          <div className="bg-white/20 rounded-xl px-3 py-1.5 min-w-[44px] text-center">
+                            <span className="text-xl font-black text-white tabular-nums leading-none">
+                              {String(u.v).padStart(2, '0')}
+                            </span>
+                            <p className="text-[8px] font-bold text-white/60 mt-0.5">{u.label}</p>
+                          </div>
+                        </div>
+                        {i < units.length - 1 && (
+                          <span className="text-lg font-black text-white/30 pb-4">:</span>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
             <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-2xl" />
           </div>
         )}
