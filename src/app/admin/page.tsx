@@ -15,7 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
@@ -30,7 +30,7 @@ export default function AdminPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     // Navigation & Tabs
-    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs'>('by-date');
+    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs' | 'votes'>('by-date');
 
     // Common State
     const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -78,6 +78,10 @@ export default function AdminPage() {
     const [expandedMemberLogs, setExpandedMemberLogs] = useState<WorkoutLog[]>([]);
     const [isFetchingMemberDetail, setIsFetchingMemberDetail] = useState(false);
 
+    // Vote Status
+    const [voteData, setVoteData] = useState<{ voter_id: string; candidate_id: string }[]>([]);
+    const [isLoadingVotes, setIsLoadingVotes] = useState(false);
+
     // Season Management State
     const [burningDates, setBurningDates] = useState({
         start: "",
@@ -100,6 +104,20 @@ export default function AdminPage() {
             }
         }
     }, [activeSeason]);
+
+    useEffect(() => {
+        if (activeTab !== 'votes' || !activeSeason) return;
+        const fetchVoteStatus = async () => {
+            setIsLoadingVotes(true);
+            const { data } = await supabase
+                .from('votes')
+                .select('voter_id, candidate_id')
+                .eq('season_id', activeSeason.id);
+            if (data) setVoteData(data);
+            setIsLoadingVotes(false);
+        };
+        fetchVoteStatus();
+    }, [activeTab, activeSeason]);
 
     useEffect(() => {
         if (!isAuthenticated || user?.role !== 'admin') {
@@ -376,6 +394,22 @@ export default function AdminPage() {
         }
     };
 
+    const handleUpdateVotingEndTime = async () => {
+        if (!activeSeason || !votingEndsAt) return;
+        setIsSubmitting(true);
+        try {
+            const endsAtISO = new Date(votingEndsAt).toISOString();
+            const { data, error } = await setVotingOpen(activeSeason.id, true, endsAtISO);
+            if (error) throw error;
+            if (data) setActiveSeason(data);
+            alert(`✅ 투표 종료 시각이 변경되었습니다.\n새 종료 시각: ${new Date(votingEndsAt).toLocaleString('ko-KR')}`);
+        } catch (err: any) {
+            alert("변경 중 오류: " + err.message);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const handleCreateSeason = async () => {
         if (!newSeasonForm.name || !newSeasonForm.start_date || !newSeasonForm.end_date) {
             alert("모든 필드를 입력해 주세요.");
@@ -485,47 +519,66 @@ export default function AdminPage() {
         );
     }
 
+    // Derived vote stats (for votes tab)
+    const voterMap = new Map<string, string[]>();
+    voteData.forEach(v => {
+        if (!voterMap.has(v.voter_id)) voterMap.set(v.voter_id, []);
+        voterMap.get(v.voter_id)!.push(v.candidate_id);
+    });
+    const getMemberName = (id: string) => members.find(m => m.id === id)?.username ?? '알 수 없음';
+    const voteCompletedMembers = members.filter(m => (voterMap.get(m.id)?.length ?? 0) >= 2);
+    const votePartialMembers = members.filter(m => voterMap.get(m.id)?.length === 1);
+    const voteNoneMembers = members.filter(m => !voterMap.has(m.id));
+
     return (
         <div className="flex flex-col min-h-screen bg-secondary pb-10">
             {/* Header */}
-            <header className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
+            <header className="sticky top-0 z-10 bg-white border-b border-slate-100">
+                <div className="px-4 pt-3 pb-2 flex items-center gap-3">
                     <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
                         <ChevronLeft size={20} />
                     </Button>
                     <h1 className="text-lg font-bold text-primary">관리자 메뉴</h1>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button
-                        onClick={() => setActiveTab('by-date')}
-                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'by-date' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
-                    >
-                        일자별
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('by-member')}
-                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'by-member' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
-                    >
-                        회원별
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('manage')}
-                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
-                    >
-                        회원관리
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('cert-logs')}
-                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'cert-logs' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
-                    >
-                        인증관리
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('seasons')}
-                        className={cn("px-4 py-1.5 text-xs font-bold rounded-lg transition-all", activeTab === 'seasons' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
-                    >
-                        시즌관리
-                    </button>
+                <div className="px-3 pb-3 overflow-x-auto scrollbar-hide">
+                    <div className="flex bg-slate-100 p-1 rounded-xl w-max">
+                        <button
+                            onClick={() => setActiveTab('by-date')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'by-date' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            일자별
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('by-member')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'by-member' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            회원별
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('manage')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            회원관리
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('cert-logs')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'cert-logs' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            인증관리
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('seasons')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'seasons' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            시즌관리
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('votes')}
+                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'votes' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            투표현황
+                        </button>
+                    </div>
                 </div>
             </header>
 
@@ -1051,14 +1104,25 @@ export default function AdminPage() {
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                {activeSeason.voting_ends_at && (
-                                                    <div className="flex items-center justify-between px-3 py-2.5 bg-green-50 rounded-xl border border-green-100">
-                                                        <span className="text-[11px] font-bold text-green-700">종료 예정</span>
-                                                        <span className="text-[11px] font-black text-green-600">
-                                                            {new Date(activeSeason.voting_ends_at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                <div className="space-y-1.5">
+                                                    <Label className="text-xs font-bold text-slate-500 ml-1">
+                                                        투표 종료 시각 <span className="text-blue-400 font-bold">(투표 중 변경 가능)</span>
+                                                    </Label>
+                                                    <Input
+                                                        type="datetime-local"
+                                                        value={votingEndsAt}
+                                                        onChange={(e) => setVotingEndsAt(e.target.value)}
+                                                        className="h-11 rounded-xl bg-slate-50 border-none"
+                                                    />
+                                                    <Button
+                                                        onClick={handleUpdateVotingEndTime}
+                                                        variant="outline"
+                                                        className="w-full h-10 rounded-xl text-xs font-black border-blue-200 text-blue-600 hover:bg-blue-50"
+                                                        disabled={isSubmitting || !votingEndsAt}
+                                                    >
+                                                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "종료 시각 변경 적용"}
+                                                    </Button>
+                                                </div>
                                                 <Button
                                                     onClick={() => handleToggleVoting(false)}
                                                     className="w-full h-12 rounded-xl bg-red-600 hover:bg-red-700 text-sm font-black shadow-lg shadow-red-100"
@@ -1117,6 +1181,108 @@ export default function AdminPage() {
                             </div>
                         </section>
                     </div>
+                )}
+
+                {/* Vote Status Tab */}
+                {activeTab === 'votes' && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary">
+                            <ListChecks size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">MVP 투표 현황</h2>
+                        </div>
+
+                        {!activeSeason ? (
+                            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-5 text-center">
+                                <p className="text-sm font-bold text-amber-700">활성화된 시즌이 없습니다.</p>
+                            </div>
+                        ) : isLoadingVotes ? (
+                            <div className="py-10 flex justify-center">
+                                <Loader2 className="animate-spin text-primary" />
+                            </div>
+                        ) : (
+                            <>
+                                {/* Summary */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-50 text-center">
+                                        <p className="text-2xl font-black text-primary">{members.length}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">전체 회원</p>
+                                    </div>
+                                    <div className="bg-emerald-50 rounded-2xl p-4 shadow-sm border border-emerald-100 text-center">
+                                        <p className="text-2xl font-black text-emerald-600">{voteCompletedMembers.length}</p>
+                                        <p className="text-[10px] font-bold text-emerald-500 mt-0.5">투표 완료</p>
+                                    </div>
+                                    <div className="bg-red-50 rounded-2xl p-4 shadow-sm border border-red-100 text-center">
+                                        <p className="text-2xl font-black text-red-500">{voteNoneMembers.length + votePartialMembers.length}</p>
+                                        <p className="text-[10px] font-bold text-red-400 mt-0.5">미완료</p>
+                                    </div>
+                                </div>
+
+                                {/* Incomplete voters */}
+                                {(voteNoneMembers.length > 0 || votePartialMembers.length > 0) && (
+                                    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                        <div className="px-5 py-3.5 bg-red-50 border-b border-red-100 flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-red-500" />
+                                            <span className="text-sm font-black text-red-700">투표 미완료 회원</span>
+                                            <span className="ml-auto text-xs font-black text-red-500">{voteNoneMembers.length + votePartialMembers.length}명</span>
+                                        </div>
+                                        <div className="p-4 space-y-2">
+                                            {voteNoneMembers.map(m => (
+                                                <div key={m.id} className="flex items-center justify-between py-2.5 px-3 bg-red-50 rounded-xl">
+                                                    <span className="text-sm font-bold text-slate-700">{m.username}</span>
+                                                    <span className="text-[10px] font-black px-2 py-1 bg-red-100 text-red-600 rounded-full">미투표 (0/2)</span>
+                                                </div>
+                                            ))}
+                                            {votePartialMembers.map(m => (
+                                                <div key={m.id} className="flex items-center justify-between py-2.5 px-3 bg-amber-50 rounded-xl">
+                                                    <span className="text-sm font-bold text-slate-700">{m.username}</span>
+                                                    <span className="text-[10px] font-black px-2 py-1 bg-amber-100 text-amber-600 rounded-full">1표만 투표 (1/2)</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* All vote details */}
+                                <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                    <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+                                        <Trophy size={14} className="text-amber-500" />
+                                        <span className="text-sm font-black text-slate-700">전체 투표 내역</span>
+                                        <span className="ml-auto text-xs text-slate-400 font-bold">총 {voteData.length}표</span>
+                                    </div>
+                                    <div className="p-4 space-y-2">
+                                        {voteData.length === 0 ? (
+                                            <p className="text-center py-6 text-xs text-slate-400">아직 투표한 회원이 없습니다.</p>
+                                        ) : (
+                                            members
+                                                .filter(m => voterMap.has(m.id))
+                                                .map(voter => (
+                                                    <div key={voter.id} className="flex items-start gap-3 py-3 px-3 bg-slate-50 rounded-xl">
+                                                        <div className="flex-1 min-w-0">
+                                                            <span className="text-xs font-black text-primary">{voter.username}</span>
+                                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                                {voterMap.get(voter.id)!.map((candidateId, idx) => (
+                                                                    <span key={idx} className="text-[11px] font-bold px-2.5 py-1 bg-primary/10 text-primary rounded-full">
+                                                                        → {getMemberName(candidateId)}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <span className={cn(
+                                                            "text-[9px] font-black px-2 py-1 rounded-full shrink-0 mt-0.5",
+                                                            (voterMap.get(voter.id)?.length ?? 0) >= 2
+                                                                ? "bg-emerald-100 text-emerald-600"
+                                                                : "bg-amber-100 text-amber-600"
+                                                        )}>
+                                                            {voterMap.get(voter.id)?.length ?? 0}/2
+                                                        </span>
+                                                    </div>
+                                                ))
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </section>
                 )}
             </main>
         </div>

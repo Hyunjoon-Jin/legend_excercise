@@ -58,9 +58,19 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
     const { user } = useAuthStore();
     const isAdmin = user?.role === 'admin';
 
-    // 남은 시간 계산 (3시간 이내 + 미투표 시 긴급)
-    const msLeft = votingEndsAt ? new Date(votingEndsAt).getTime() - Date.now() : null;
+    // 남은 시간 계산 (1초 단위 실시간 업데이트)
     const THREE_HOURS = 3 * 60 * 60 * 1000;
+    const [msLeft, setMsLeft] = useState<number | null>(() =>
+        votingEndsAt ? new Date(votingEndsAt).getTime() - Date.now() : null
+    );
+
+    useEffect(() => {
+        if (!votingEndsAt) { setMsLeft(null); return; }
+        const update = () => setMsLeft(new Date(votingEndsAt).getTime() - Date.now());
+        update();
+        const id = setInterval(update, 1000);
+        return () => clearInterval(id);
+    }, [votingEndsAt]);
     const [candidates, setCandidates] = useState<any[]>([]);
     const [myVotes, setMyVotes] = useState<any[]>([]);
     const [prs, setPrs] = useState<any[]>([]);
@@ -225,6 +235,47 @@ export function MVPVoting({ votingOpen = true, votingEndsAt }: MVPVotingProps) {
                     </div>
                 )}
             </div>
+
+            {/* 투표 종료 카운트다운 — 모든 사용자에게 항상 표시 */}
+            {votingOpen && msLeft !== null && msLeft > 0 && (
+                <div className="bg-gradient-to-br from-slate-800 to-primary rounded-2xl p-4 shadow-lg shadow-slate-200 space-y-2.5">
+                    <p className="text-[10px] font-black text-white/50 text-center tracking-widest">투표 마감까지 남은 시간</p>
+                    <div className="flex items-end justify-center gap-1.5">
+                        {(() => {
+                            const totalSec = Math.max(0, Math.floor(msLeft / 1000));
+                            const d = Math.floor(totalSec / 86400);
+                            const h = Math.floor((totalSec % 86400) / 3600);
+                            const m = Math.floor((totalSec % 3600) / 60);
+                            const s = totalSec % 60;
+                            const units = d > 0
+                                ? [{ v: d, label: '일' }, { v: h, label: '시' }, { v: m, label: '분' }]
+                                : [{ v: h, label: '시' }, { v: m, label: '분' }, { v: s, label: '초' }];
+                            return units.map((u, i) => (
+                                <div key={i} className="flex items-end gap-1.5">
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-white/10 rounded-xl px-3 py-2 min-w-[52px] text-center">
+                                            <span className="text-2xl font-black text-white tabular-nums leading-none">
+                                                {String(u.v).padStart(2, '0')}
+                                            </span>
+                                        </div>
+                                        <span className="text-[9px] font-bold text-white/40 mt-1">{u.label}</span>
+                                    </div>
+                                    {i < units.length - 1 && (
+                                        <span className="text-xl font-black text-white/25 pb-5">:</span>
+                                    )}
+                                </div>
+                            ));
+                        })()}
+                    </div>
+                </div>
+            )}
+
+            {votingOpen && msLeft !== null && msLeft <= 0 && (
+                <div className="bg-slate-100 rounded-2xl p-3 flex items-center justify-center gap-2">
+                    <AlertCircle size={14} className="text-slate-400" />
+                    <span className="text-xs font-bold text-slate-500">투표 시간이 종료되었습니다.</span>
+                </div>
+            )}
 
             {!votingOpen && (
                 <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-start gap-3">
