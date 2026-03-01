@@ -182,6 +182,12 @@ export default function DashboardPage() {
     return isWithinInterval(workDate, { start: weekStart, end: weekEnd });
   }).length;
 
+  const weeklyPending = myLogs.filter(l => {
+    if (l.status !== 'pending') return false;
+    const workDate = new Date(l.workout_date);
+    return isWithinInterval(workDate, { start: weekStart, end: weekEnd });
+  }).length;
+
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-secondary">
       {/* Header */}
@@ -352,7 +358,14 @@ export default function DashboardPage() {
             <div className="mt-6 space-y-2">
               <div className="flex justify-between text-xs font-medium">
                 <span className="text-muted-foreground">이번 주 운동 현황</span>
-                <span className="text-primary">{Math.min(weeklyApproved, 2)}/2회</span>
+                <div className="flex items-center gap-2">
+                  {weeklyPending > 0 && (
+                    <Badge className="bg-amber-100 text-amber-700 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
+                      대기중 {weeklyPending}
+                    </Badge>
+                  )}
+                  <span className="text-primary">{Math.min(weeklyApproved, 2)}/2회</span>
+                </div>
               </div>
               <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div
@@ -365,18 +378,16 @@ export default function DashboardPage() {
         </Card>
 
         {/* Quick Actions / Buttons */}
-        <div className={cn("grid gap-4", user.role === 'admin' ? "grid-cols-2" : "grid-cols-1")}>
-          {user.role === 'admin' && (
-            <Button
-              variant="default"
-              className="h-auto flex-col gap-2 py-5 shadow-sm active:scale-95 transition-transform"
-              size="lg"
-              onClick={() => setShowCertModal(true)}
-            >
-              <PlusCircle size={24} className="text-accent" />
-              <span className="font-bold">운동 인증하기</span>
-            </Button>
-          )}
+        <div className="grid gap-4 grid-cols-2">
+          <Button
+            variant="default"
+            className="h-auto flex-col gap-2 py-5 shadow-sm active:scale-95 transition-transform"
+            size="lg"
+            onClick={() => setShowCertModal(true)}
+          >
+            <PlusCircle size={24} className="text-accent" />
+            <span className="font-bold">운동 인증하기</span>
+          </Button>
           <Button
             variant="outline"
             className="h-auto flex-col gap-2 py-5 bg-white border-none shadow-sm active:scale-95 transition-transform"

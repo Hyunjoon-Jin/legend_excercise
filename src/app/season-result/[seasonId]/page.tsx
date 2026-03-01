@@ -157,10 +157,12 @@ export default function SeasonResultPage({ params }: { params: Promise<{ seasonI
         );
     }
 
+    const myResult = results.find(r => r.userId === user?.id);
+
     return (
         <div className="flex flex-col min-h-screen bg-slate-50 pb-24">
             {/* Header */}
-            <header className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-4">
+            <header className="sticky top-0 z-30 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-4">
                 <Button variant="ghost" size="icon" onClick={() => router.back()} className="rounded-full">
                     <ChevronLeft size={24} />
                 </Button>
@@ -200,6 +202,37 @@ export default function SeasonResultPage({ params }: { params: Promise<{ seasonI
                                 </div>
                             )}
                         </div>
+
+                        {/* My Result Section */}
+                        {myResult && (
+                            <div className="mt-4 border-t border-white/10 pt-4">
+                                <p className="text-[10px] font-black text-white/40 tracking-widest mb-2">나의 시즌 결과</p>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/10 rounded-2xl px-3 py-2 text-center min-w-[48px]">
+                                        <p className="text-lg font-black text-white">{myResult.rank}위</p>
+                                        <p className="text-[9px] text-white/40 font-bold">순위</p>
+                                    </div>
+                                    <div className="bg-white/10 rounded-2xl px-3 py-2 text-center min-w-[48px]">
+                                        <p className="text-lg font-black text-accent">{myResult.totalScore}</p>
+                                        <p className="text-[9px] text-white/40 font-bold">총점</p>
+                                    </div>
+                                    <div className="bg-white/10 rounded-2xl px-3 py-2 text-center min-w-[48px]">
+                                        <p className="text-lg font-black text-white">{myResult.logCount}</p>
+                                        <p className="text-[9px] text-white/40 font-bold">인증횟수</p>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <div className="flex items-center gap-1">
+                                            <CheckCircle2 size={10} className="text-emerald-400" />
+                                            <span className="text-[10px] font-black text-emerald-400">{myResult.passedWeeks}주 성공</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <XCircle size={10} className="text-red-400" />
+                                            <span className="text-[10px] font-black text-red-400">{myResult.failedWeeks}주 미달</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <Trophy size={120} className="absolute -right-6 -bottom-6 text-white/5" />
                 </div>

@@ -15,9 +15,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason } from "@/lib/data";
+import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -30,7 +30,7 @@ export default function AdminPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     // Navigation & Tabs
-    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs' | 'votes'>('by-date');
+    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs' | 'votes' | 'pending' | 'lottery'>('by-date');
 
     // Common State
     const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -82,6 +82,12 @@ export default function AdminPage() {
     const [voteData, setVoteData] = useState<{ voter_id: string; candidate_id: string }[]>([]);
     const [isLoadingVotes, setIsLoadingVotes] = useState(false);
 
+    // Pending Approval
+    const [pendingLogs, setPendingLogs] = useState<WorkoutLog[]>([]);
+    const [isLoadingPending, setIsLoadingPending] = useState(false);
+    const [rejectNoteMap, setRejectNoteMap] = useState<Record<string, string>>({});
+    const [processingLogId, setProcessingLogId] = useState<string | null>(null);
+
     // Season Management State
     const [burningDates, setBurningDates] = useState({
         start: "",
@@ -120,6 +126,17 @@ export default function AdminPage() {
     }, [activeTab, activeSeason]);
 
     useEffect(() => {
+        if (activeTab !== 'pending' || !activeSeason) return;
+        const fetchPending = async () => {
+            setIsLoadingPending(true);
+            const { data } = await getPendingLogs(activeSeason.id);
+            if (data) setPendingLogs(data);
+            setIsLoadingPending(false);
+        };
+        fetchPending();
+    }, [activeTab, activeSeason]);
+
+    useEffect(() => {
         if (!isAuthenticated || user?.role !== 'admin') {
             alert("관리자 권한이 필요합니다.");
             router.push("/");
@@ -134,7 +151,12 @@ export default function AdminPage() {
                 getAllSeasons()
             ]);
 
-            if (seasonRes.data) setActiveSeason(seasonRes.data);
+            if (seasonRes.data) {
+                setActiveSeason(seasonRes.data);
+                // Pre-load pending count for badge
+                const { data: pending } = await getPendingLogs(seasonRes.data.id);
+                if (pending) setPendingLogs(pending);
+            }
             if (membersRes.data) setMembers(membersRes.data);
             if (allSeasonsRes.data) setSeasons(allSeasonsRes.data);
             setIsLoading(false);
@@ -511,6 +533,52 @@ export default function AdminPage() {
         }
     };
 
+    const handleApprove = async (log: WorkoutLog) => {
+        if (processingLogId) return;
+        setProcessingLogId(log.id);
+        try {
+            const { error } = await updateLogStatus(log.id, 'approved');
+            if (error) throw error;
+            await createNotification({
+                user_id: log.user_id,
+                title: '운동 인증 승인',
+                content: '운동 인증이 승인되었습니다. 수고하셨어요!',
+                link: '/',
+            } as any);
+            setPendingLogs(prev => prev.filter(l => l.id !== log.id));
+        } catch (err: any) {
+            alert("승인 처리 중 오류: " + err.message);
+        } finally {
+            setProcessingLogId(null);
+        }
+    };
+
+    const handleReject = async (log: WorkoutLog) => {
+        if (processingLogId) return;
+        const note = rejectNoteMap[log.id] || '';
+        setProcessingLogId(log.id);
+        try {
+            const { error } = await updateLogStatus(log.id, 'rejected', note);
+            if (error) throw error;
+            await createNotification({
+                user_id: log.user_id,
+                title: '운동 인증 반려',
+                content: note ? `운동 인증이 반려되었습니다. 사유: ${note}` : '운동 인증이 반려되었습니다.',
+                link: '/',
+            } as any);
+            setPendingLogs(prev => prev.filter(l => l.id !== log.id));
+            setRejectNoteMap(prev => {
+                const next = { ...prev };
+                delete next[log.id];
+                return next;
+            });
+        } catch (err: any) {
+            alert("반려 처리 중 오류: " + err.message);
+        } finally {
+            setProcessingLogId(null);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-secondary">
@@ -577,6 +645,24 @@ export default function AdminPage() {
                             className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'votes' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             투표현황
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('pending')}
+                            className={cn("relative px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'pending' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            승인 대기
+                            {pendingLogs.length > 0 && (
+                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] flex items-center justify-center rounded-full font-bold">
+                                    {pendingLogs.length}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('lottery')}
+                            className={cn("flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'lottery' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            <Gift size={11} />
+                            추첨
                         </button>
                     </div>
                 </div>
@@ -1281,6 +1367,125 @@ export default function AdminPage() {
                                     </div>
                                 </div>
                             </>
+                        )}
+                    </section>
+                )}
+                {/* Lottery Tab */}
+                {activeTab === 'lottery' && (
+                    <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                            <Gift size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">추첨 행사 (제24조)</h2>
+                        </div>
+                        <Card>
+                            <CardContent className="p-5 space-y-4">
+                                <p className="text-sm text-slate-500 leading-relaxed">
+                                    라이브 추첨 페이지에서 회원들과 함께 추첨을 진행합니다.
+                                    추첨 URL을 채팅방에 공유하면 회원들이 실시간으로 함께 시청할 수 있습니다.
+                                </p>
+                                <Button onClick={() => router.push('/lottery')} className="w-full gap-2">
+                                    <Gift size={15} /> 라이브 추첨 시작하기
+                                </Button>
+                                <p className="text-center text-xs text-slate-400 font-mono">/lottery</p>
+                            </CardContent>
+                        </Card>
+                    </section>
+                )}
+
+                {/* Pending Approval Tab */}
+                {activeTab === 'pending' && (
+                    <section className="space-y-4">
+                        <div className="flex items-center gap-2 text-primary">
+                            <ListChecks size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">승인 대기 목록</h2>
+                        </div>
+                        {!activeSeason ? (
+                            <div className="p-8 text-center bg-white rounded-2xl text-sm text-slate-400">
+                                활성화된 시즌이 없습니다.
+                            </div>
+                        ) : isLoadingPending ? (
+                            <div className="space-y-3">
+                                {[1, 2, 3].map(i => <div key={i} className="h-40 bg-white/50 animate-pulse rounded-2xl" />)}
+                            </div>
+                        ) : pendingLogs.length === 0 ? (
+                            <div className="p-8 text-center bg-white rounded-2xl text-sm text-slate-400">
+                                대기 중인 인증 신청이 없습니다.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {pendingLogs.map(log => {
+                                    const profile = (log as any).profiles;
+                                    const memberName = profile?.display_name || profile?.username || '회원';
+                                    const workoutTypeLabel: Record<string, string> = {
+                                        running: '러닝', gym: '운동완료', walking: '걷기/산책',
+                                        yoga: '요가/필라테스', sports: '기타 스포츠',
+                                    };
+                                    return (
+                                        <div key={log.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                                            {/* Card Header */}
+                                            <div className="px-4 py-3 flex items-center gap-3 border-b border-slate-100">
+                                                <div className="w-9 h-9 rounded-full bg-slate-100 overflow-hidden flex items-center justify-center shrink-0">
+                                                    {profile?.avatar_url
+                                                        ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                        : <span className="text-sm font-bold text-slate-500">{memberName[0]}</span>
+                                                    }
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-sm text-primary truncate">{memberName}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded-md shrink-0">{profile?.tier}</span>
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                                        {log.workout_date} · {workoutTypeLabel[log.workout_type] ?? log.workout_type} · {log.duration_minutes}분
+                                                    </p>
+                                                </div>
+                                                <Badge className="bg-amber-100 text-amber-700 border-none font-bold text-[10px] shrink-0">대기중</Badge>
+                                            </div>
+
+                                            {/* Proof Image */}
+                                            {log.proof_image_url && log.proof_image_url !== 'admin-registered' && (
+                                                <div className="relative w-full aspect-video bg-slate-100">
+                                                    <img src={log.proof_image_url} alt="증거 사진" className="w-full h-full object-contain" />
+                                                </div>
+                                            )}
+
+                                            {/* Comment */}
+                                            {log.comment && (
+                                                <div className="px-4 py-2 text-sm text-slate-600 bg-slate-50">
+                                                    {log.comment}
+                                                </div>
+                                            )}
+
+                                            {/* Reject Note + Action Buttons */}
+                                            <div className="px-4 py-3 space-y-3">
+                                                <input
+                                                    type="text"
+                                                    placeholder="반려 사유 입력 (선택)"
+                                                    value={rejectNoteMap[log.id] || ''}
+                                                    onChange={e => setRejectNoteMap(prev => ({ ...prev, [log.id]: e.target.value }))}
+                                                    className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                />
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <button
+                                                        onClick={() => handleReject(log)}
+                                                        disabled={processingLogId === log.id}
+                                                        className="h-10 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold hover:bg-slate-200 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {processingLogId === log.id ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '반려하기'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleApprove(log)}
+                                                        disabled={processingLogId === log.id}
+                                                        className="h-10 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                                    >
+                                                        {processingLogId === log.id ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : '승인하기'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         )}
                     </section>
                 )}

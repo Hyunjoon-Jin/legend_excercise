@@ -198,3 +198,16 @@ ALTER TABLE seasons ADD COLUMN IF NOT EXISTS voting_ends_at TIMESTAMP WITH TIME 
 
 -- 12. Posts 테이블 미디어 URL 컬럼 추가 (사진/영상 첨부)
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}';
+
+-- 13. Reactions (채팅/게시물/댓글 이모지 리액션)
+-- target_type: 'chat' | 'post' | 'comment'
+CREATE TABLE IF NOT EXISTS reactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  target_type TEXT NOT NULL CHECK (target_type IN ('chat', 'post', 'comment')),
+  target_id TEXT NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(target_type, target_id, user_id, emoji)
+);
+ALTER TABLE reactions DISABLE ROW LEVEL SECURITY;

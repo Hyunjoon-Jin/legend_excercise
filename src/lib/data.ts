@@ -155,6 +155,31 @@ export const updateLogStatus = async (logId: string, status: 'approved' | 'rejec
     return { data, error };
 };
 
+export const getPendingLogs = async (seasonId: string) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .select('*, profiles(username, display_name, avatar_url, tier)')
+        .eq('season_id', seasonId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+    return { data: data as WorkoutLog[], error };
+};
+
+export const notifyAdmins = async (memberName: string, logId: string) => {
+    const { data: admins } = await supabase
+        .from('profiles').select('id').eq('role', 'admin');
+    if (!admins || admins.length === 0) return { error: null };
+    const notifications = admins.map((admin: { id: string }) => ({
+        user_id: admin.id,
+        title: '새 운동 인증 신청',
+        content: `${memberName} 님이 운동 인증을 신청했습니다. 확인 후 승인해 주세요.`,
+        is_read: false,
+        link: '/admin',
+    }));
+    const { error } = await supabase.from('notifications').insert(notifications);
+    return { error };
+};
+
 export const deleteWorkoutLogs = async (userId: string, seasonId: string, dates: string[]) => {
     const { data, error } = await supabase
         .from('workout_logs')
@@ -525,6 +550,42 @@ export const toggleLike = async (postId: string, userId: string) => {
         await supabase.from('posts').update({ like_count: count ?? 0 }).eq('id', postId);
         return { liked: true, error: null };
     }
+};
+
+// --- Reactions ---
+export const getReactionsForTargets = async (
+    targetType: 'chat' | 'post' | 'comment',
+    targetIds: string[]
+) => {
+    if (targetIds.length === 0) return { data: [] as { target_id: string; user_id: string; emoji: string }[], error: null };
+    const { data, error } = await supabase
+        .from('reactions')
+        .select('target_id, user_id, emoji')
+        .eq('target_type', targetType)
+        .in('target_id', targetIds);
+    return { data: data as { target_id: string; user_id: string; emoji: string }[] | null, error };
+};
+
+export const toggleReaction = async (
+    targetType: 'chat' | 'post' | 'comment',
+    targetId: string,
+    userId: string,
+    emoji: string
+) => {
+    const { data: existing } = await supabase
+        .from('reactions')
+        .select('id')
+        .eq('target_type', targetType)
+        .eq('target_id', targetId)
+        .eq('user_id', userId)
+        .eq('emoji', emoji)
+        .maybeSingle();
+    if (existing) {
+        await supabase.from('reactions').delete().eq('id', existing.id);
+        return { added: false };
+    }
+    await supabase.from('reactions').insert([{ target_type: targetType, target_id: targetId, user_id: userId, emoji }]);
+    return { added: true };
 };
 
 // --- Trophy Stats ---

@@ -20,8 +20,11 @@ import {
     toggleLike,
     getMyLike,
     uploadPostMedia,
+    getReactionsForTargets,
+    toggleReaction,
 } from "@/lib/data";
-import type { ChatMessage, Post, PostComment } from "@/types/database";
+import type { ChatMessage, Post, PostComment, ReactionGroup } from "@/types/database";
+import { ReactionBar } from "@/components/features/reaction-bar";
 import { cn } from "@/lib/utils";
 import {
     Send,
@@ -58,6 +61,47 @@ function getDisplayName(profiles?: { display_name?: string; username?: string } 
 
 function isVideoUrl(url: string) {
     return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+}
+
+// ─── Reaction helpers ────────────────────────────────────────────────────────
+type RawReaction = { target_id: string; user_id: string; emoji: string };
+
+function buildReactionsMap(raw: RawReaction[], userId: string): Record<string, ReactionGroup[]> {
+    const tmp: Record<string, Record<string, { count: number; hasMe: boolean }>> = {};
+    (raw || []).forEach((r) => {
+        if (!tmp[r.target_id]) tmp[r.target_id] = {};
+        if (!tmp[r.target_id][r.emoji]) tmp[r.target_id][r.emoji] = { count: 0, hasMe: false };
+        tmp[r.target_id][r.emoji].count++;
+        if (r.user_id === userId) tmp[r.target_id][r.emoji].hasMe = true;
+    });
+    return Object.fromEntries(
+        Object.entries(tmp).map(([id, em]) => [
+            id,
+            Object.entries(em).map(([emoji, v]) => ({ emoji, ...v })),
+        ])
+    );
+}
+
+function optimisticToggle(
+    prev: Record<string, ReactionGroup[]>,
+    targetId: string,
+    emoji: string
+): Record<string, ReactionGroup[]> {
+    const current = prev[targetId] || [];
+    const found = current.find((g) => g.emoji === emoji);
+    let next: ReactionGroup[];
+    if (found) {
+        if (found.hasMe) {
+            next = found.count === 1
+                ? current.filter((g) => g.emoji !== emoji)
+                : current.map((g) => g.emoji === emoji ? { ...g, count: g.count - 1, hasMe: false } : g);
+        } else {
+            next = current.map((g) => g.emoji === emoji ? { ...g, count: g.count + 1, hasMe: true } : g);
+        }
+    } else {
+        next = [...current, { emoji, count: 1, hasMe: true }];
+    }
+    return { ...prev, [targetId]: next };
 }
 
 // ─── Media Gallery ────────────────────────────────────────────────────────────
@@ -98,18 +142,23 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [sending, setSending] = useState(false);
+    const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({});
     const bottomRef = useRef<HTMLDivElement>(null);
 
-    // Initial load
+    // Initial load + reactions
     useEffect(() => {
-        getChatMessages().then(({ data }) => {
-            if (data) setMessages(data);
+        getChatMessages().then(async ({ data }) => {
+            if (!data) return;
+            setMessages(data);
+            const ids = data.map((m) => m.id);
+            const { data: raw } = await getReactionsForTargets("chat", ids);
+            if (raw) setReactionsMap(buildReactionsMap(raw, userId));
         });
-    }, []);
+    }, [userId]);
 
-    // Realtime subscription
+    // Realtime: new messages
     useEffect(() => {
-        const channel = supabase
+        const msgChannel = supabase
             .channel("chat_messages_realtime")
             .on(
                 "postgres_changes",
@@ -130,10 +179,33 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
             )
             .subscribe();
 
+        // Realtime: new reactions from others
+        const rxnChannel = supabase
+            .channel("chat_reactions_realtime")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "reactions" },
+                (payload) => {
+                    const { target_type, target_id, user_id: reactorId, emoji } = payload.new as any;
+                    if (target_type !== "chat") return;
+                    if (reactorId === userId) return; // already handled optimistically
+                    setReactionsMap((prev) => {
+                        const current = prev[target_id] || [];
+                        const found = current.find((g) => g.emoji === emoji);
+                        const next = found
+                            ? current.map((g) => g.emoji === emoji ? { ...g, count: g.count + 1 } : g)
+                            : [...current, { emoji, count: 1, hasMe: false }];
+                        return { ...prev, [target_id]: next };
+                    });
+                }
+            )
+            .subscribe();
+
         return () => {
-            supabase.removeChannel(channel);
+            supabase.removeChannel(msgChannel);
+            supabase.removeChannel(rxnChannel);
         };
-    }, []);
+    }, [userId]);
 
     // Scroll to bottom on new messages
     useEffect(() => {
@@ -147,6 +219,11 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
         setInput("");
         await sendChatMessage(userId, text);
         setSending(false);
+    };
+
+    const handleChatReaction = (msgId: string, emoji: string) => {
+        setReactionsMap((prev) => optimisticToggle(prev, msgId, emoji));
+        toggleReaction("chat", msgId, userId, emoji);
     };
 
     return (
@@ -170,6 +247,7 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                         idx === 0 || !isSameDay(messages[idx - 1].created_at, msg.created_at);
                     const prevMsg = idx > 0 ? messages[idx - 1] : null;
                     const showSender = !isMe && (prevMsg?.user_id !== msg.user_id || showDate);
+                    const msgReactions = reactionsMap[msg.id] || [];
 
                     return (
                         <div key={msg.id}>
@@ -221,6 +299,17 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                                             </span>
                                         )}
                                     </div>
+
+                                    {/* Reaction bar */}
+                                    {(msgReactions.length > 0 || !isMe) && (
+                                        <ReactionBar
+                                            groups={msgReactions}
+                                            onToggle={(emoji) => handleChatReaction(msg.id, emoji)}
+                                            canAdd={!isMe}
+                                            align={isMe ? "right" : "left"}
+                                            className={cn("mt-0.5", isMe ? "mr-0.5" : "ml-0.5")}
+                                        />
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -276,6 +365,7 @@ function PostDetail({
     const [commentInput, setCommentInput] = useState("");
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({});
 
     useEffect(() => {
         const load = async () => {
@@ -286,6 +376,18 @@ function PostDetail({
             ]);
             setComments(c || []);
             setLiked(!!myLike);
+
+            // Load reactions for post + all comments
+            const commentIds = (c || []).map((cmt) => cmt.id);
+            const [{ data: postRaw }, { data: cmtRaw }] = await Promise.all([
+                getReactionsForTargets("post", [post.id]),
+                commentIds.length > 0
+                    ? getReactionsForTargets("comment", commentIds)
+                    : Promise.resolve({ data: [] as { target_id: string; user_id: string; emoji: string }[] }),
+            ]);
+            const combined = [...(postRaw || []), ...(cmtRaw || [])];
+            setReactionsMap(buildReactionsMap(combined, userId));
+
             setLoading(false);
         };
         load();
@@ -317,6 +419,16 @@ function PostDetail({
         if (!window.confirm("게시글을 삭제하시겠습니까?")) return;
         await deletePost(post.id, post.user_id);
         onDeleted();
+    };
+
+    const handlePostReaction = (emoji: string) => {
+        setReactionsMap((prev) => optimisticToggle(prev, post.id, emoji));
+        toggleReaction("post", post.id, userId, emoji);
+    };
+
+    const handleCommentReaction = (commentId: string, emoji: string) => {
+        setReactionsMap((prev) => optimisticToggle(prev, commentId, emoji));
+        toggleReaction("comment", commentId, userId, emoji);
     };
 
     return (
@@ -351,16 +463,23 @@ function PostDetail({
                     {/* Media Gallery */}
                     <MediaGallery urls={post.media_urls || []} />
 
-                    <button
-                        onClick={handleLike}
-                        className={cn(
-                            "mt-4 flex items-center gap-1.5 text-sm font-medium transition-colors",
-                            liked ? "text-red-500" : "text-slate-400 hover:text-red-400"
-                        )}
-                    >
-                        <Heart size={16} fill={liked ? "currentColor" : "none"} />
-                        {likeCount}
-                    </button>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                        <button
+                            onClick={handleLike}
+                            className={cn(
+                                "flex items-center gap-1.5 text-sm font-medium transition-colors",
+                                liked ? "text-red-500" : "text-slate-400 hover:text-red-400"
+                            )}
+                        >
+                            <Heart size={16} fill={liked ? "currentColor" : "none"} />
+                            {likeCount}
+                        </button>
+                        <ReactionBar
+                            groups={reactionsMap[post.id] || []}
+                            onToggle={handlePostReaction}
+                            canAdd={post.user_id !== userId}
+                        />
+                    </div>
                 </div>
 
                 {/* Comments */}
@@ -394,6 +513,12 @@ function PostDetail({
                                             )}
                                         </div>
                                         <p className="text-xs text-slate-600 leading-relaxed">{c.content}</p>
+                                        <ReactionBar
+                                            groups={reactionsMap[c.id] || []}
+                                            onToggle={(emoji) => handleCommentReaction(c.id, emoji)}
+                                            canAdd={c.user_id !== userId}
+                                            className="mt-1.5"
+                                        />
                                     </div>
                                 </div>
                             ))}

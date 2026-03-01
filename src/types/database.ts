@@ -106,3 +106,18 @@ export interface PostLike {
     user_id: string;
     created_at: string;
 }
+
+export interface Reaction {
+    id: string;
+    target_type: 'chat' | 'post' | 'comment';
+    target_id: string;
+    user_id: string;
+    emoji: string;
+    created_at: string;
+}
+
+export interface ReactionGroup {
+    emoji: string;
+    count: number;
+    hasMe: boolean;
+}

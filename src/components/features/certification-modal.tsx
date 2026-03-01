@@ -26,7 +26,7 @@ import { Camera, X, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/store/use-auth-store";
-import { submitWorkoutLog, getActiveSeason } from "@/lib/data";
+import { submitWorkoutLog, getActiveSeason, notifyAdmins } from "@/lib/data";
 
 const certSchema = z.object({
     type: z.string().min(1, "운동 종류를 선택하세요."),
@@ -115,6 +115,9 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
             });
 
             if (submitError) throw submitError;
+
+            const memberName = user.username || '회원';
+            await notifyAdmins(memberName, '');
 
             alert("인증 신청이 완료되었습니다! 관리자 승인을 기다려주세요.");
             onSuccess?.();
