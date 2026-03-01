@@ -26,11 +26,13 @@ import { Camera, X, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/store/use-auth-store";
-import { submitWorkoutLog, getActiveSeason, notifyAdmins } from "@/lib/data";
+import { submitWorkoutLog, getActiveSeason, notifyAdmins, updateWorkoutLog } from "@/lib/data";
+import type { WorkoutLog } from "@/types/database";
 
 const certSchema = z.object({
     type: z.string().min(1, "운동 종류를 선택하세요."),
     duration: z.string().min(1, "운동 시간을 입력하세요."),
+    date: z.string().min(1, "날짜를 입력하세요."),
     comment: z.string().optional(),
 });
 
@@ -40,36 +42,74 @@ interface CertModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    editingLog?: WorkoutLog;
 }
 
-export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProps) {
+export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: CertModalProps) {
     const { user } = useAuthStore();
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null);
+
+    const isEditMode = !!editingLog;
 
     const form = useForm<CertFormValues>({
         resolver: zodResolver(certSchema),
         defaultValues: {
             type: "",
             duration: "",
+            date: new Date().toISOString().split('T')[0],
             comment: "",
         },
     });
 
     useEffect(() => {
-        const fetchSeason = async () => {
-            const { data } = await getActiveSeason();
-            if (data) setActiveSeasonId(data.id);
-        };
-        if (isOpen) fetchSeason();
-    }, [isOpen]);
+        if (!isOpen) return;
+        if (isEditMode && editingLog) {
+            form.reset({
+                type: editingLog.workout_type || "",
+                duration: String(editingLog.duration_minutes || ""),
+                date: editingLog.workout_date || new Date().toISOString().split('T')[0],
+                comment: editingLog.comment || "",
+            });
+            setExistingImageUrl(editingLog.proof_image_url || null);
+            setImageFile(null);
+            setImagePreview(null);
+        } else {
+            form.reset({
+                type: "",
+                duration: "",
+                date: new Date().toISOString().split('T')[0],
+                comment: "",
+            });
+            setImageFile(null);
+            setImagePreview(null);
+            setExistingImageUrl(null);
+            const fetchSeason = async () => {
+                const { data } = await getActiveSeason();
+                if (data) setActiveSeasonId(data.id);
+            };
+            fetchSeason();
+        }
+    }, [isOpen, isEditMode, editingLog]);
+
+    useEffect(() => {
+        if (!isOpen && !isEditMode) {
+            const fetchSeason = async () => {
+                const { data } = await getActiveSeason();
+                if (data) setActiveSeasonId(data.id);
+            };
+            fetchSeason();
+        }
+    }, []);
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             setImageFile(file);
+            setExistingImageUrl(null);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setImagePreview(reader.result as string);
@@ -78,9 +118,17 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
         }
     };
 
+    const clearImage = () => {
+        setImagePreview(null);
+        setImageFile(null);
+        setExistingImageUrl(null);
+    };
+
     const onSubmit = async (data: CertFormValues) => {
-        if (!user || !activeSeasonId) return;
-        if (!imageFile) {
+        if (!user) return;
+
+        const hasImage = imageFile || existingImageUrl;
+        if (!hasImage) {
             alert("인증 사진을 업로드해 주세요.");
             return;
         }
@@ -88,43 +136,56 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
         setIsSubmitting(true);
 
         try {
-            // 1. Upload Image to Supabase Storage
-            const fileExt = imageFile.name.split('.').pop();
-            const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-            const filePath = `workout-proofs/${fileName}`;
+            let proofUrl = existingImageUrl || "";
 
-            const { error: uploadError } = await supabase.storage
-                .from('images') // Ensure you have a bucket named 'images'
-                .upload(filePath, imageFile);
+            // Upload new image if selected
+            if (imageFile) {
+                const fileExt = imageFile.name.split('.').pop();
+                const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+                const filePath = `workout-proofs/${fileName}`;
 
-            if (uploadError) throw new Error("이미지 업로드에 실패했습니다.");
+                const { error: uploadError } = await supabase.storage
+                    .from('images')
+                    .upload(filePath, imageFile);
 
-            const { data: { publicUrl } } = supabase.storage
-                .from('images')
-                .getPublicUrl(filePath);
+                if (uploadError) throw new Error("이미지 업로드에 실패했습니다.");
 
-            // 2. Submit Log to Database
-            const { error: submitError } = await submitWorkoutLog({
-                user_id: user.id,
-                season_id: activeSeasonId,
-                workout_date: new Date().toISOString().split('T')[0],
-                workout_type: data.type as any,
-                duration_minutes: parseInt(data.duration),
-                proof_image_url: publicUrl,
-                comment: data.comment,
-            });
+                const { data: { publicUrl } } = supabase.storage
+                    .from('images')
+                    .getPublicUrl(filePath);
 
-            if (submitError) throw submitError;
+                proofUrl = publicUrl;
+            }
 
-            const memberName = user.username || '회원';
-            await notifyAdmins(memberName, '');
+            if (isEditMode && editingLog) {
+                const { error } = await updateWorkoutLog(editingLog.id, {
+                    workout_type: data.type as any,
+                    duration_minutes: parseInt(data.duration),
+                    comment: data.comment,
+                    proof_image_url: proofUrl,
+                    workout_date: data.date,
+                });
+                if (error) throw error;
+                alert("인증이 수정되었습니다.");
+            } else {
+                if (!activeSeasonId) throw new Error("활성 시즌이 없습니다.");
+                const { error: submitError } = await submitWorkoutLog({
+                    user_id: user.id,
+                    season_id: activeSeasonId,
+                    workout_date: data.date,
+                    workout_type: data.type as any,
+                    duration_minutes: parseInt(data.duration),
+                    proof_image_url: proofUrl,
+                    comment: data.comment,
+                });
+                if (submitError) throw submitError;
+                const memberName = user.username || '회원';
+                await notifyAdmins(memberName, '');
+                alert("인증 신청이 완료되었습니다! 관리자 승인을 기다려주세요.");
+            }
 
-            alert("인증 신청이 완료되었습니다! 관리자 승인을 기다려주세요.");
             onSuccess?.();
             onClose();
-            form.reset();
-            setImageFile(null);
-            setImagePreview(null);
         } catch (err: any) {
             alert(err.message || "오류가 발생했습니다.");
         } finally {
@@ -132,26 +193,27 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
         }
     };
 
+    const currentPreview = imagePreview || existingImageUrl;
+
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle className="text-xl font-bold text-primary">운동 인증하기</DialogTitle>
+                    <DialogTitle className="text-xl font-bold text-primary">
+                        {isEditMode ? "인증 수정하기" : "운동 인증하기"}
+                    </DialogTitle>
                 </DialogHeader>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
                     {/* Image Upload Area */}
                     <div className="space-y-2">
                         <Label>인증 사진</Label>
-                        {imagePreview ? (
+                        {currentPreview ? (
                             <div className="relative aspect-video w-full rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50">
-                                <Image src={imagePreview} alt="Preview" fill className="object-cover" />
+                                <Image src={currentPreview} alt="Preview" fill className="object-cover" />
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setImagePreview(null);
-                                        setImageFile(null);
-                                    }}
+                                    onClick={clearImage}
                                     className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
                                 >
                                     <X size={16} />
@@ -172,7 +234,10 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label>운동 종류</Label>
-                            <Select onValueChange={(val) => form.setValue("type", val)}>
+                            <Select
+                                value={form.watch("type")}
+                                onValueChange={(val) => form.setValue("type", val)}
+                            >
                                 <SelectTrigger className={cn(form.formState.errors.type && "border-error focus:ring-error")}>
                                     <SelectValue placeholder="선택" />
                                 </SelectTrigger>
@@ -197,6 +262,15 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
                     </div>
 
                     <div className="space-y-2">
+                        <Label>운동 날짜</Label>
+                        <Input
+                            {...form.register("date")}
+                            type="date"
+                            className={cn(form.formState.errors.date && "border-error focus-visible:ring-error")}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
                         <Label>코멘트 (선택)</Label>
                         <Input {...form.register("comment")} placeholder="오늘 운동 소감 한마디" />
                     </div>
@@ -212,7 +286,7 @@ export function CertificationModal({ isOpen, onClose, onSuccess }: CertModalProp
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     처리 중...
                                 </>
-                            ) : "인증 신청하기"}
+                            ) : isEditMode ? "수정 완료" : "인증 신청하기"}
                         </Button>
                     </DialogFooter>
                 </form>

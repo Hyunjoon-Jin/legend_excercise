@@ -190,6 +190,33 @@ export const deleteWorkoutLogs = async (userId: string, seasonId: string, dates:
     return { data, error };
 };
 
+export const deleteWorkoutLog = async (logId: string) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .delete()
+        .eq('id', logId);
+    return { data, error };
+};
+
+export const updateWorkoutLog = async (
+    logId: string,
+    updates: {
+        workout_type?: string;
+        duration_minutes?: number;
+        comment?: string;
+        proof_image_url?: string;
+        workout_date?: string;
+    }
+) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .update(updates)
+        .eq('id', logId)
+        .select()
+        .single();
+    return { data, error };
+};
+
 // --- Rankings ---
 export const getRankings = async (seasonId: string) => {
     // 1. Fetch Season, Logs, and Votes in parallel
@@ -396,6 +423,20 @@ export const createNotification = async (notif: Omit<Notification, 'id' | 'creat
         .from('notifications')
         .insert([notif]);
     return { data, error };
+};
+
+export const broadcastAnnouncement = async (title: string, content: string, link?: string) => {
+    const { data: profiles } = await supabase.from('profiles').select('id');
+    if (!profiles || profiles.length === 0) return { error: new Error('회원이 없습니다.') };
+    const notifications = profiles.map((p: { id: string }) => ({
+        user_id: p.id,
+        title,
+        content,
+        is_read: false,
+        link: link || null,
+    }));
+    const { error } = await supabase.from('notifications').insert(notifications);
+    return { error };
 };
 
 // --- Chat ---

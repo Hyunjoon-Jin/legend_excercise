@@ -15,9 +15,9 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift, Pencil } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift, Pencil, Bell } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification } from "@/lib/data";
+import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification, broadcastAnnouncement } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -30,7 +30,7 @@ export default function AdminPage() {
     const { user, isAuthenticated } = useAuthStore();
 
     // Navigation & Tabs
-    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs' | 'votes' | 'pending' | 'lottery'>('by-date');
+    const [activeTab, setActiveTab] = useState<'by-date' | 'by-member' | 'manage' | 'seasons' | 'cert-logs' | 'votes' | 'pending' | 'lottery' | 'notice'>('by-date');
 
     // Common State
     const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -99,6 +99,11 @@ export default function AdminPage() {
         end: ""
     });
     const [votingEndsAt, setVotingEndsAt] = useState<string>("");
+
+    // Announcement State
+    const [noticeTitle, setNoticeTitle] = useState('');
+    const [noticeContent, setNoticeContent] = useState('');
+    const [isSendingNotice, setIsSendingNotice] = useState(false);
 
     useEffect(() => {
         if (activeSeason) {
@@ -658,49 +663,49 @@ export default function AdminPage() {
                     </Button>
                     <h1 className="text-lg font-bold text-primary">관리자 메뉴</h1>
                 </div>
-                <div className="px-3 pb-3 overflow-x-auto scrollbar-hide">
-                    <div className="flex bg-slate-100 p-1 rounded-xl w-max">
+                <div className="px-3 pb-3">
+                    <div className="grid grid-cols-3 gap-0.5 bg-slate-100 p-1 rounded-xl">
                         <button
                             onClick={() => setActiveTab('by-date')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'by-date' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'by-date' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             일자별
                         </button>
                         <button
                             onClick={() => setActiveTab('by-member')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'by-member' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'by-member' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             회원별
                         </button>
                         <button
                             onClick={() => setActiveTab('manage')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'manage' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             회원관리
                         </button>
                         <button
                             onClick={() => setActiveTab('cert-logs')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'cert-logs' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'cert-logs' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             인증관리
                         </button>
                         <button
                             onClick={() => setActiveTab('seasons')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'seasons' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'seasons' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             시즌관리
                         </button>
                         <button
                             onClick={() => setActiveTab('votes')}
-                            className={cn("px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'votes' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'votes' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             투표현황
                         </button>
                         <button
                             onClick={() => setActiveTab('pending')}
-                            className={cn("relative px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'pending' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("relative py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'pending' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
-                            승인 대기
+                            승인대기
                             {pendingLogs.length > 0 && (
                                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] flex items-center justify-center rounded-full font-bold">
                                     {pendingLogs.length}
@@ -709,10 +714,16 @@ export default function AdminPage() {
                         </button>
                         <button
                             onClick={() => setActiveTab('lottery')}
-                            className={cn("flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap", activeTab === 'lottery' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                            className={cn("flex items-center justify-center gap-1 py-2 text-[11px] font-bold rounded-lg transition-all", activeTab === 'lottery' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             <Gift size={11} />
                             추첨
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('notice')}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'notice' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
+                        >
+                            공지
                         </button>
                     </div>
                 </div>
@@ -1602,6 +1613,67 @@ export default function AdminPage() {
                                 })}
                             </div>
                         )}
+                    </section>
+                )}
+                {/* Notice Tab */}
+                {activeTab === 'notice' && (
+                    <section className="space-y-5">
+                        <div className="flex items-center gap-2">
+                            <Bell size={20} className="text-slate-400" />
+                            <h2 className="text-md font-bold">공지사항 발송</h2>
+                        </div>
+                        <Card>
+                            <CardContent className="p-5 space-y-4">
+                                <p className="text-sm text-slate-500 leading-relaxed">
+                                    공지 내용을 작성하면 모든 회원의 알림함에 즉시 전달됩니다.
+                                </p>
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">제목</Label>
+                                    <Input
+                                        value={noticeTitle}
+                                        onChange={e => setNoticeTitle(e.target.value)}
+                                        placeholder="공지 제목을 입력하세요"
+                                        className="text-sm"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">내용</Label>
+                                    <textarea
+                                        value={noticeContent}
+                                        onChange={e => setNoticeContent(e.target.value)}
+                                        placeholder="공지 내용을 입력하세요..."
+                                        rows={5}
+                                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                                    />
+                                </div>
+                                <Button
+                                    disabled={!noticeTitle.trim() || !noticeContent.trim() || isSendingNotice}
+                                    onClick={async () => {
+                                        if (!window.confirm(`"${noticeTitle}" 공지를 모든 회원에게 발송하시겠습니까?`)) return;
+                                        setIsSendingNotice(true);
+                                        const { error } = await broadcastAnnouncement(
+                                            `📢 ${noticeTitle}`,
+                                            noticeContent
+                                        );
+                                        setIsSendingNotice(false);
+                                        if (error) {
+                                            alert("발송 실패: " + error.message);
+                                        } else {
+                                            alert("공지가 모든 회원에게 발송되었습니다.");
+                                            setNoticeTitle('');
+                                            setNoticeContent('');
+                                        }
+                                    }}
+                                    className="w-full gap-2"
+                                >
+                                    {isSendingNotice ? (
+                                        <><Loader2 size={15} className="animate-spin" /> 발송 중...</>
+                                    ) : (
+                                        <><Bell size={15} /> 전체 공지 발송</>
+                                    )}
+                                </Button>
+                            </CardContent>
+                        </Card>
                     </section>
                 )}
             </main>

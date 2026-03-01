@@ -17,12 +17,14 @@ import {
   Bell,
   BookOpen,
   Star,
-  X
+  X,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs } from "@/lib/data";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
@@ -34,6 +36,7 @@ export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [showCertModal, setShowCertModal] = useState(false);
   const [showNotifList, setShowNotifList] = useState(false);
+  const [editingLog, setEditingLog] = useState<WorkoutLog | null>(null);
 
   // Data States
   const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -167,6 +170,14 @@ export default function DashboardPage() {
       setMemberPr(prs?.find(p => p.user_id === item.userId) ?? null);
       setIsLoadingModal(false);
     }
+  };
+
+  const pendingLogs = myLogs.filter(l => l.status === 'pending');
+
+  const handleDeleteLog = async (logId: string) => {
+    if (!window.confirm("이 인증 신청을 취소하시겠습니까?")) return;
+    await deleteWorkoutLog(logId);
+    setMyLogs(prev => prev.filter(l => l.id !== logId));
   };
 
   const approvedCount = myLogs.filter(l => l.status === 'approved').length;
@@ -376,6 +387,45 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Pending Certs */}
+        {pendingLogs.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-slate-700">대기 중인 인증</span>
+              <Badge className="bg-amber-100 text-amber-700 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
+                {pendingLogs.length}건
+              </Badge>
+            </div>
+            <div className="space-y-1.5">
+              {pendingLogs.map(log => (
+                <div key={log.id} className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 shadow-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                    <span className="text-xs font-medium text-slate-700 truncate">
+                      {log.workout_date} · {log.workout_type === 'running' ? '러닝' : log.workout_type === 'gym' ? '운동완료' : log.workout_type === 'walking' ? '걷기/산책' : log.workout_type === 'yoga' ? '요가/필라테스' : '기타'}
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0">{log.duration_minutes}분</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setEditingLog(log)}
+                      className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteLog(log.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions / Buttons */}
         <div className="grid gap-4 grid-cols-2">
@@ -707,10 +757,14 @@ export default function DashboardPage() {
       <BottomNav onPlusClick={() => setShowCertModal(true)} />
 
       <CertificationModal
-        isOpen={showCertModal}
-        onClose={() => setShowCertModal(false)}
+        isOpen={showCertModal || !!editingLog}
+        onClose={() => {
+          setShowCertModal(false);
+          setEditingLog(null);
+        }}
+        editingLog={editingLog ?? undefined}
         onSuccess={() => {
-          // Re-fetch data or update UI
+          setEditingLog(null);
           window.location.reload();
         }}
       />
