@@ -221,7 +221,7 @@ export default function DashboardPage() {
                 onClick={() => router.push("/admin")}
                 className="bg-accent text-white hover:bg-accent/90 gap-1 font-bold h-8"
               >
-                관리자 고고
+                관리자 모드
               </Button>
             )}
           </div>
