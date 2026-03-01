@@ -15,7 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift } from "lucide-react";
+import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification } from "@/lib/data";
 import { Profile, Season, WorkoutLog } from "@/types/database";
@@ -77,6 +77,11 @@ export default function AdminPage() {
     const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
     const [expandedMemberLogs, setExpandedMemberLogs] = useState<WorkoutLog[]>([]);
     const [isFetchingMemberDetail, setIsFetchingMemberDetail] = useState(false);
+    const [editingLogId, setEditingLogId] = useState<string | null>(null);
+    const [editLogDate, setEditLogDate] = useState('');
+    const [editLogType, setEditLogType] = useState('gym');
+    const [rejectingLogId, setRejectingLogId] = useState<string | null>(null);
+    const [rejectLogNote, setRejectLogNote] = useState('');
 
     // Vote Status
     const [voteData, setVoteData] = useState<{ voter_id: string; candidate_id: string }[]>([]);
@@ -506,30 +511,75 @@ export default function AdminPage() {
         }
     };
 
+    const refreshExpandedLogs = async () => {
+        if (!expandedMemberId || !activeSeason) return;
+        const { data } = await supabase
+            .from('workout_logs')
+            .select('*')
+            .eq('user_id', expandedMemberId)
+            .eq('season_id', activeSeason.id)
+            .order('workout_date', { ascending: false });
+        if (data) setExpandedMemberLogs(data);
+    };
+
     const handleDeleteRecord = async (logId: string) => {
         if (!confirm("이 운동 기록을 삭제하시겠습니까?")) return;
+        try {
+            const { error } = await supabase.from('workout_logs').delete().eq('id', logId);
+            if (error) throw error;
+            await refreshExpandedLogs();
+        } catch (err: any) {
+            alert("삭제 오류: " + err.message);
+        }
+    };
 
+    const handleUpdateLog = async (logId: string) => {
         try {
             const { error } = await supabase
                 .from('workout_logs')
-                .delete()
+                .update({ workout_date: editLogDate, workout_type: editLogType as any })
                 .eq('id', logId);
-
             if (error) throw error;
-
-            alert("기록이 삭제되었습니다.");
-            // Refresh expanded logs
-            if (expandedMemberId) {
-                const { data } = await supabase
-                    .from('workout_logs')
-                    .select('*')
-                    .eq('user_id', expandedMemberId)
-                    .eq('season_id', activeSeason?.id)
-                    .order('workout_date', { ascending: false });
-                if (data) setExpandedMemberLogs(data);
-            }
+            setEditingLogId(null);
+            await refreshExpandedLogs();
         } catch (err: any) {
-            alert("삭제 오류: " + err.message);
+            alert('수정 오류: ' + err.message);
+        }
+    };
+
+    const handleRejectLog = async (logId: string, userId: string) => {
+        try {
+            const { error } = await updateLogStatus(logId, 'rejected', rejectLogNote || undefined);
+            if (error) throw error;
+            await createNotification({
+                user_id: userId,
+                title: '운동 인증 반려',
+                content: rejectLogNote
+                    ? `운동 인증이 반려되었습니다. 사유: ${rejectLogNote}`
+                    : '운동 인증이 반려되었습니다.',
+                link: '/',
+            } as any);
+            setRejectingLogId(null);
+            setRejectLogNote('');
+            await refreshExpandedLogs();
+        } catch (err: any) {
+            alert('반려 오류: ' + err.message);
+        }
+    };
+
+    const handleApproveLog = async (log: WorkoutLog) => {
+        try {
+            const { error } = await updateLogStatus(log.id, 'approved');
+            if (error) throw error;
+            await createNotification({
+                user_id: log.user_id,
+                title: '운동 인증 승인',
+                content: '운동 인증이 승인되었습니다. 수고하셨어요!',
+                link: '/',
+            } as any);
+            await refreshExpandedLogs();
+        } catch (err: any) {
+            alert('승인 오류: ' + err.message);
         }
     };
 
@@ -934,32 +984,97 @@ export default function AdminPage() {
                                                             </div>
                                                         </div>
 
-                                                        <p className="text-[10px] font-bold text-slate-500 mb-2 px-1">기존 운동 기록 목록 ({expandedMemberLogs.length})</p>
-                                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-1 scrollbar-hide">
+                                                        <div className="flex items-center justify-between mb-2 px-1">
+                                                            <p className="text-[10px] font-bold text-slate-500">전체 기록 ({expandedMemberLogs.length}건)</p>
+                                                            <div className="flex gap-2 text-[9px] font-bold">
+                                                                <span className="text-emerald-600">{expandedMemberLogs.filter(l => l.status === 'approved').length}승인</span>
+                                                                <span className="text-amber-500">{expandedMemberLogs.filter(l => l.status === 'pending').length}대기</span>
+                                                                <span className="text-red-500">{expandedMemberLogs.filter(l => l.status === 'rejected').length}반려</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
                                                             {expandedMemberLogs.length === 0 ? (
                                                                 <p className="text-center py-6 text-[10px] text-slate-400">등록된 기록이 없습니다.</p>
                                                             ) : (
-                                                                expandedMemberLogs.map((log) => (
-                                                                    <div key={log.id} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="w-8 h-8 rounded-lg bg-primary/5 flex items-center justify-center text-primary">
-                                                                                <CalendarIcon size={14} />
-                                                                            </div>
-                                                                            <div>
-                                                                                <p className="text-xs font-bold text-slate-700">{format(new Date(log.workout_date), 'MM월 dd일')}</p>
-                                                                                <p className="text-[9px] text-slate-400">{log.workout_type === 'gym' ? '운동완료' : log.workout_type === 'running' ? '러닝' : log.workout_type === 'walking' ? '걷기' : log.workout_type === 'yoga' ? '요가' : '스포츠'}</p>
-                                                                            </div>
+                                                                expandedMemberLogs.map((log) => {
+                                                                    const typeLabels: Record<string, string> = { gym: '운동완료', running: '러닝', walking: '걷기', yoga: '요가', sports: '스포츠' };
+                                                                    const isEditing = editingLogId === log.id;
+                                                                    const isRejecting = rejectingLogId === log.id;
+                                                                    return (
+                                                                        <div key={log.id} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+                                                                            {isEditing ? (
+                                                                                <div className="p-2.5 flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={editLogDate}
+                                                                                        onChange={e => setEditLogDate(e.target.value)}
+                                                                                        className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary/30 min-w-0"
+                                                                                    />
+                                                                                    <select
+                                                                                        value={editLogType}
+                                                                                        onChange={e => setEditLogType(e.target.value)}
+                                                                                        className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none shrink-0"
+                                                                                    >
+                                                                                        <option value="gym">운동완료</option>
+                                                                                        <option value="running">러닝</option>
+                                                                                        <option value="walking">걷기</option>
+                                                                                        <option value="yoga">요가</option>
+                                                                                        <option value="sports">스포츠</option>
+                                                                                    </select>
+                                                                                    <button onClick={() => handleUpdateLog(log.id)} className="px-3 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shrink-0">저장</button>
+                                                                                    <button onClick={() => setEditingLogId(null)} className="text-xs text-slate-400 px-1 shrink-0">취소</button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="p-2.5 flex items-center gap-2">
+                                                                                    <div className="w-7 h-7 rounded-lg bg-primary/5 flex items-center justify-center text-primary shrink-0">
+                                                                                        <CalendarIcon size={13} />
+                                                                                    </div>
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p className="text-xs font-bold text-slate-700">{format(new Date(log.workout_date), 'MM월 dd일')}</p>
+                                                                                        <p className="text-[9px] text-slate-400">{typeLabels[log.workout_type] ?? log.workout_type}</p>
+                                                                                    </div>
+                                                                                    <span className={cn(
+                                                                                        "text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0",
+                                                                                        log.status === 'approved' ? "bg-emerald-100 text-emerald-600" : log.status === 'pending' ? "bg-amber-100 text-amber-600" : "bg-red-100 text-red-500"
+                                                                                    )}>
+                                                                                        {log.status === 'approved' ? '승인' : log.status === 'pending' ? '대기' : '반려'}
+                                                                                    </span>
+                                                                                    <div className="flex items-center gap-1 shrink-0">
+                                                                                        <button onClick={() => { setEditingLogId(log.id); setEditLogDate(log.workout_date); setEditLogType(log.workout_type); setRejectingLogId(null); }} className="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-300 hover:text-primary transition-colors">
+                                                                                            <Pencil size={12} />
+                                                                                        </button>
+                                                                                        {log.status === 'approved' && (
+                                                                                            <button onClick={() => { setRejectingLogId(log.id); setRejectLogNote(''); setEditingLogId(null); }} className="h-6 px-1.5 rounded-md text-[10px] font-bold bg-red-50 text-red-400 hover:bg-red-100 transition-colors">반려</button>
+                                                                                        )}
+                                                                                        {log.status === 'rejected' && (
+                                                                                            <button onClick={() => handleApproveLog(log)} className="h-6 px-1.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">재승인</button>
+                                                                                        )}
+                                                                                        {log.status === 'pending' && (<>
+                                                                                            <button onClick={() => handleApproveLog(log)} className="h-6 px-1.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">승인</button>
+                                                                                            <button onClick={() => { setRejectingLogId(log.id); setRejectLogNote(''); setEditingLogId(null); }} className="h-6 px-1.5 rounded-md text-[10px] font-bold bg-red-50 text-red-400 hover:bg-red-100 transition-colors">반려</button>
+                                                                                        </>)}
+                                                                                        <button onClick={() => handleDeleteRecord(log.id)} className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors">
+                                                                                            <X size={12} />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                            {isRejecting && !isEditing && (
+                                                                                <div className="px-2.5 pb-2.5 flex items-center gap-2 border-t border-slate-50 pt-2">
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        placeholder="반려 사유 (선택)"
+                                                                                        value={rejectLogNote}
+                                                                                        onChange={e => setRejectLogNote(e.target.value)}
+                                                                                        className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-red-300 min-w-0"
+                                                                                    />
+                                                                                    <button onClick={() => handleRejectLog(log.id, log.user_id)} className="px-3 py-1.5 bg-red-500 text-white text-xs font-bold rounded-lg whitespace-nowrap shrink-0">반려 확정</button>
+                                                                                    <button onClick={() => setRejectingLogId(null)} className="text-xs text-slate-400 shrink-0">취소</button>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="icon"
-                                                                            onClick={() => handleDeleteRecord(log.id)}
-                                                                            className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
-                                                                        >
-                                                                            <X size={14} />
-                                                                        </Button>
-                                                                    </div>
-                                                                ))
+                                                                    );
+                                                                })
                                                             )}
                                                         </div>
                                                     </div>
