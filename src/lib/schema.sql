@@ -211,3 +211,13 @@ CREATE TABLE IF NOT EXISTS reactions (
   UNIQUE(target_type, target_id, user_id, emoji)
 );
 ALTER TABLE reactions DISABLE ROW LEVEL SECURITY;
+
+-- 14. Announcements (관리자 공지사항)
+CREATE TABLE IF NOT EXISTS announcements (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE announcements DISABLE ROW LEVEL SECURITY;

@@ -17,7 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, UserPlus, Save, Loader2, Calendar as CalendarIcon, Users, CalendarDays, CheckCircle2, PlusCircle, X, Trophy, Power, StopCircle, ListChecks, Gift, Pencil, Bell } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification, broadcastAnnouncement } from "@/lib/data";
+import { getActiveSeason, submitWorkoutLog, createMember, createSeason, getAllSeasons, toggleSeasonActive, setVotingOpen, closeSeason, getPendingLogs, updateLogStatus, createNotification, sendAnnouncement, getAnnouncements, deleteAnnouncement } from "@/lib/data";
+import type { Announcement } from "@/types/database";
 import { Profile, Season, WorkoutLog } from "@/types/database";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -104,6 +105,8 @@ export default function AdminPage() {
     const [noticeTitle, setNoticeTitle] = useState('');
     const [noticeContent, setNoticeContent] = useState('');
     const [isSendingNotice, setIsSendingNotice] = useState(false);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
 
     useEffect(() => {
         if (activeSeason) {
@@ -134,6 +137,17 @@ export default function AdminPage() {
         };
         fetchVoteStatus();
     }, [activeTab, activeSeason]);
+
+    useEffect(() => {
+        if (activeTab !== 'notice') return;
+        const fetchAnnouncements = async () => {
+            setIsLoadingAnnouncements(true);
+            const { data } = await getAnnouncements();
+            if (data) setAnnouncements(data);
+            setIsLoadingAnnouncements(false);
+        };
+        fetchAnnouncements();
+    }, [activeTab]);
 
     useEffect(() => {
         if (activeTab !== 'pending' || !activeSeason) return;
@@ -1620,12 +1634,17 @@ export default function AdminPage() {
                     <section className="space-y-5">
                         <div className="flex items-center gap-2">
                             <Bell size={20} className="text-slate-400" />
-                            <h2 className="text-md font-bold">공지사항 발송</h2>
+                            <h2 className="text-md font-bold">공지사항</h2>
                         </div>
+
+                        {/* Write New Announcement */}
                         <Card>
-                            <CardContent className="p-5 space-y-4">
-                                <p className="text-sm text-slate-500 leading-relaxed">
-                                    공지 내용을 작성하면 모든 회원의 알림함에 즉시 전달됩니다.
+                            <CardHeader className="pb-2 pt-4 px-5">
+                                <CardTitle className="text-sm font-bold text-slate-700">새 공지 작성</CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-5 pb-5 space-y-3">
+                                <p className="text-xs text-slate-400">
+                                    발송하면 모든 회원 알림함에 즉시 전달되고 커뮤니티 공지 탭에 게시됩니다.
                                 </p>
                                 <div className="space-y-2">
                                     <Label className="text-sm font-semibold">제목</Label>
@@ -1649,12 +1668,10 @@ export default function AdminPage() {
                                 <Button
                                     disabled={!noticeTitle.trim() || !noticeContent.trim() || isSendingNotice}
                                     onClick={async () => {
+                                        if (!user) return;
                                         if (!window.confirm(`"${noticeTitle}" 공지를 모든 회원에게 발송하시겠습니까?`)) return;
                                         setIsSendingNotice(true);
-                                        const { error } = await broadcastAnnouncement(
-                                            `📢 ${noticeTitle}`,
-                                            noticeContent
-                                        );
+                                        const { data, error } = await sendAnnouncement(noticeTitle, noticeContent, user.id);
                                         setIsSendingNotice(false);
                                         if (error) {
                                             alert("발송 실패: " + error.message);
@@ -1662,6 +1679,7 @@ export default function AdminPage() {
                                             alert("공지가 모든 회원에게 발송되었습니다.");
                                             setNoticeTitle('');
                                             setNoticeContent('');
+                                            if (data) setAnnouncements(prev => [data, ...prev]);
                                         }
                                     }}
                                     className="w-full gap-2"
@@ -1674,6 +1692,48 @@ export default function AdminPage() {
                                 </Button>
                             </CardContent>
                         </Card>
+
+                        {/* Announcement History */}
+                        <div>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">발송 이력</p>
+                            {isLoadingAnnouncements ? (
+                                <div className="space-y-2">
+                                    {[1, 2].map(i => <div key={i} className="h-20 bg-white/60 animate-pulse rounded-2xl" />)}
+                                </div>
+                            ) : announcements.length === 0 ? (
+                                <div className="p-6 text-center bg-white rounded-2xl text-sm text-slate-400">
+                                    발송된 공지가 없습니다.
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {announcements.map(ann => (
+                                        <Card key={ann.id}>
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-sm text-slate-800 truncate">{ann.title}</p>
+                                                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{ann.content}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-1.5">
+                                                            {new Date(ann.created_at).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (!window.confirm("이 공지를 삭제하시겠습니까?")) return;
+                                                            const { error } = await deleteAnnouncement(ann.id);
+                                                            if (!error) setAnnouncements(prev => prev.filter(a => a.id !== ann.id));
+                                                        }}
+                                                        className="p-1.5 text-slate-300 hover:text-red-400 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </section>
                 )}
             </main>

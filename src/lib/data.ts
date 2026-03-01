@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -436,6 +436,44 @@ export const broadcastAnnouncement = async (title: string, content: string, link
         link: link || null,
     }));
     const { error } = await supabase.from('notifications').insert(notifications);
+    return { error };
+};
+
+// announcements 테이블에 저장 + 전체 알림 발송
+export const sendAnnouncement = async (title: string, content: string, adminId: string) => {
+    // 1. Insert announcement record
+    const { data: ann, error: annError } = await supabase
+        .from('announcements')
+        .insert([{ title, content, created_by: adminId }])
+        .select()
+        .single();
+    if (annError) return { data: null, error: annError };
+
+    // 2. Notify all members
+    const { data: profiles } = await supabase.from('profiles').select('id');
+    if (profiles && profiles.length > 0) {
+        const notifications = profiles.map((p: { id: string }) => ({
+            user_id: p.id,
+            title: `📢 ${title}`,
+            content,
+            is_read: false,
+            link: '/community',
+        }));
+        await supabase.from('notifications').insert(notifications);
+    }
+    return { data: ann as Announcement, error: null };
+};
+
+export const getAnnouncements = async () => {
+    const { data, error } = await supabase
+        .from('announcements')
+        .select('*, profiles(username, display_name)')
+        .order('created_at', { ascending: false });
+    return { data: data as Announcement[] | null, error };
+};
+
+export const deleteAnnouncement = async (id: string) => {
+    const { error } = await supabase.from('announcements').delete().eq('id', id);
     return { error };
 };
 

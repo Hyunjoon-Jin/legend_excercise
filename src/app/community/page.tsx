@@ -22,8 +22,9 @@ import {
     uploadPostMedia,
     getReactionsForTargets,
     toggleReaction,
+    getAnnouncements,
 } from "@/lib/data";
-import type { ChatMessage, Post, PostComment, ReactionGroup } from "@/types/database";
+import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement } from "@/types/database";
 import { ReactionBar } from "@/components/features/reaction-bar";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +39,7 @@ import {
     ImagePlus,
     X,
     Images,
+    Bell,
 } from "lucide-react";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -554,6 +556,77 @@ function PostDetail({
     );
 }
 
+// ─── Notice Tab ───────────────────────────────────────────────────────────────
+function NoticeTab() {
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [expanded, setExpanded] = useState<string | null>(null);
+
+    useEffect(() => {
+        getAnnouncements().then(({ data }) => {
+            if (data) setAnnouncements(data);
+            setLoading(false);
+        });
+    }, []);
+
+    return (
+        <div className="flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-white">
+                <Bell size={16} className="text-slate-400" />
+                <span className="text-sm text-slate-500 font-medium">공지사항</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                    <div className="flex justify-center items-center h-40">
+                        <Loader2 size={24} className="animate-spin text-slate-300" />
+                    </div>
+                ) : announcements.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 gap-2">
+                        <Bell size={32} className="text-slate-200" />
+                        <p className="text-sm text-slate-400">등록된 공지가 없습니다.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-slate-50">
+                        {announcements.map((ann) => (
+                            <button
+                                key={ann.id}
+                                onClick={() => setExpanded(expanded === ann.id ? null : ann.id)}
+                                className="w-full text-left px-4 py-4 hover:bg-slate-50 transition-colors"
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                                        <Bell size={14} className="text-amber-500" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="text-[10px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                                                공지
+                                            </span>
+                                            <span className="text-[10px] text-slate-400">
+                                                {new Date(ann.created_at).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+                                            </span>
+                                        </div>
+                                        <p className="font-semibold text-slate-800 text-sm truncate">{ann.title}</p>
+                                        {expanded === ann.id ? (
+                                            <p className="text-sm text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap">
+                                                {ann.content}
+                                            </p>
+                                        ) : (
+                                            <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{ann.content}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── Board Tab ────────────────────────────────────────────────────────────────
 function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
     const [posts, setPosts] = useState<Post[]>([]);
@@ -839,7 +912,7 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
 export default function CommunityPage() {
     const router = useRouter();
     const { user, isAuthenticated } = useAuthStore();
-    const [tab, setTab] = useState<"chat" | "board">("chat");
+    const [tab, setTab] = useState<"chat" | "board" | "notice">("chat");
 
     useEffect(() => {
         if (!isAuthenticated) router.push("/login");
@@ -856,7 +929,7 @@ export default function CommunityPage() {
                 <h1 className="text-xl font-black text-slate-900 mb-3">커뮤니티</h1>
                 {/* Tab Bar */}
                 <div className="flex">
-                    {(["chat", "board"] as const).map((t) => (
+                    {(["chat", "board", "notice"] as const).map((t) => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
@@ -867,7 +940,7 @@ export default function CommunityPage() {
                                     : "border-transparent text-slate-400 hover:text-slate-600"
                             )}
                         >
-                            {t === "chat" ? "채팅" : "게시판"}
+                            {t === "chat" ? "채팅" : t === "board" ? "게시판" : "공지"}
                         </button>
                     ))}
                 </div>
@@ -877,8 +950,10 @@ export default function CommunityPage() {
             <div className="flex-1 overflow-hidden flex flex-col" style={{ marginBottom: "80px" }}>
                 {tab === "chat" ? (
                     <ChatTab userId={user.id} isAdmin={isAdmin} />
-                ) : (
+                ) : tab === "board" ? (
                     <BoardTab userId={user.id} isAdmin={isAdmin} />
+                ) : (
+                    <NoticeTab />
                 )}
             </div>
 
