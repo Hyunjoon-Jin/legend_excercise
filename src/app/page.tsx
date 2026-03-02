@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification } from "@/lib/data";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification, getLatestAnnouncement } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [showCertModal, setShowCertModal] = useState(false);
   const [showNotifList, setShowNotifList] = useState(false);
   const [editingLog, setEditingLog] = useState<WorkoutLog | null>(null);
+  const [latestAnnouncement, setLatestAnnouncement] = useState<{ id: string; title: string; content: string; created_at: string } | null>(null);
 
   // Data States
   const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -89,6 +90,8 @@ export default function DashboardPage() {
           setMyVoteCount(votes?.length ?? 0);
         }
       }
+
+      getLatestAnnouncement().then(({ data }) => { if (data) setLatestAnnouncement(data); });
 
       const promises: any[] = [getNotifications(user.id)];
       if (season) {
@@ -426,6 +429,24 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* 공지사항 배너 */}
+        {latestAnnouncement && (
+          <div
+            onClick={() => router.push("/community?tab=notice")}
+            className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-center gap-3 cursor-pointer active:scale-[0.98] transition-all"
+          >
+            <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+              <Bell size={16} className="text-blue-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-blue-400 mb-0.5">📢 공지사항</p>
+              <p className="text-sm font-bold text-slate-700 truncate">{latestAnnouncement.title}</p>
+              <p className="text-[11px] text-slate-400 truncate mt-0.5">{latestAnnouncement.content}</p>
+            </div>
+            <ChevronRight size={16} className="text-slate-300 shrink-0" />
+          </div>
+        )}
+
         {/* Profile Card */}
         <Card className="border-none shadow-sm overflow-hidden bg-white">
           <CardContent className="p-6">
@@ -676,7 +697,7 @@ export default function DashboardPage() {
               💪 최근 운동 인증
             </h3>
             <button
-              onClick={() => router.push("/community")}
+              onClick={() => router.push("/community?tab=cert")}
               className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
               더보기 <ChevronRight size={14} />
@@ -695,7 +716,7 @@ export default function DashboardPage() {
                 return (
                   <div
                     key={log.id}
-                    onClick={() => router.push("/community")}
+                    onClick={() => router.push("/community?tab=cert")}
                     className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.98] transition-transform"
                   >
                     <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0">

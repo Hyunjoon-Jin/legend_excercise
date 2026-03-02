@@ -482,6 +482,16 @@ export const getAnnouncements = async () => {
     return { data: data as Announcement[] | null, error };
 };
 
+export const getLatestAnnouncement = async () => {
+    const { data, error } = await supabase
+        .from('announcements')
+        .select('id, title, content, created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    return { data: data as Pick<Announcement, 'id' | 'title' | 'content' | 'created_at'> | null, error };
+};
+
 export const deleteAnnouncement = async (id: string) => {
     const { error } = await supabase.from('announcements').delete().eq('id', id);
     return { error };

@@ -1034,6 +1034,13 @@ export default function CommunityPage() {
     const { user, isAuthenticated } = useAuthStore();
     const [tab, setTab] = useState<"chat" | "board" | "notice" | "cert">("chat");
 
+    // URL ?tab= 파라미터로 초기 탭 설정
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const t = new URLSearchParams(window.location.search).get("tab");
+        if (t === "chat" || t === "board" || t === "notice" || t === "cert") setTab(t);
+    }, []);
+
     useEffect(() => {
         if (!isAuthenticated) router.push("/login");
     }, [isAuthenticated, router]);
