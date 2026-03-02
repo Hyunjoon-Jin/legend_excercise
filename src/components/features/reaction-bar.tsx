@@ -7,7 +7,23 @@ import type { ReactionGroup } from "@/types/database";
 
 export { type ReactionGroup };
 
-export const REACTION_EMOJIS = ["❤️", "💪", "😂", "🔥", "👍", "🥹", "😮", "🎉"];
+// 4열 × 5행 = 20개 이모지
+export const REACTION_EMOJIS = [
+    "❤️", "💪", "🔥", "🎉",
+    "👍", "😂", "🥹", "😮",
+    "😍", "👏", "💯", "🤩",
+    "😭", "🙏", "😤", "🏃",
+    "🥰", "😅", "😔", "🤔",
+];
+
+// 이모지별 한국어 라벨 (툴팁용)
+const EMOJI_LABELS: Record<string, string> = {
+    "❤️": "좋아요",   "💪": "대단해요", "🔥": "불타요",   "🎉": "축하해요",
+    "👍": "최고예요",  "😂": "웃겨요",   "🥹": "감동이에요","😮": "놀라워요",
+    "😍": "멋져요",   "👏": "응원해요",  "💯": "완벽해요",  "🤩": "신기해요",
+    "😭": "눈물나요",  "🙏": "감사해요",  "😤": "파이팅",   "🏃": "달려요",
+    "🥰": "완전좋아요","😅": "ㅋㅋ",     "😔": "아쉬워요",  "🤔": "음...",
+};
 
 interface ReactionBarProps {
     groups: ReactionGroup[];
@@ -54,6 +70,7 @@ export function ReactionBar({
                 <button
                     key={g.emoji}
                     onClick={() => onToggle(g.emoji)}
+                    title={EMOJI_LABELS[g.emoji]}
                     className={cn(
                         "flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-all active:scale-90 select-none",
                         g.hasMe
@@ -87,7 +104,7 @@ export function ReactionBar({
                             className={cn(
                                 "absolute bottom-full mb-2 z-[60]",
                                 "bg-white rounded-2xl shadow-2xl border border-slate-100",
-                                "px-2 py-2 flex items-center gap-0.5",
+                                "p-2 grid grid-cols-4 gap-0.5",
                                 align === "right" ? "right-0" : "left-0"
                             )}
                         >
@@ -100,12 +117,16 @@ export function ReactionBar({
                                             onToggle(emoji);
                                             setShowPicker(false);
                                         }}
+                                        title={EMOJI_LABELS[emoji]}
                                         className={cn(
-                                            "w-9 h-9 rounded-xl flex items-center justify-center text-[20px] transition-all active:scale-90 hover:bg-slate-50 select-none",
+                                            "w-10 h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 hover:bg-slate-50 select-none",
                                             existing?.hasMe && "bg-amber-50 ring-1 ring-amber-200"
                                         )}
                                     >
-                                        {emoji}
+                                        <span className="text-[20px] leading-none">{emoji}</span>
+                                        <span className="text-[8px] text-slate-400 leading-none font-medium">
+                                            {EMOJI_LABELS[emoji]}
+                                        </span>
                                     </button>
                                 );
                             })}
