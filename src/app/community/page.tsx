@@ -23,8 +23,9 @@ import {
     getReactionsForTargets,
     toggleReaction,
     getAnnouncements,
+    getCertificationFeed,
 } from "@/lib/data";
-import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement } from "@/types/database";
+import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement, WorkoutLog } from "@/types/database";
 import { ReactionBar } from "@/components/features/reaction-bar";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +64,17 @@ function getDisplayName(profiles?: { display_name?: string; username?: string } 
 
 function isVideoUrl(url: string) {
     return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+}
+
+function getWorkoutBadge(type: WorkoutLog['workout_type']): string {
+    switch (type) {
+        case 'running':  return '🏃 러닝';
+        case 'gym':      return '💪 운동완료';
+        case 'walking':  return '🚶 걷기/산책';
+        case 'yoga':     return '🧘 요가/필라테스';
+        case 'sports':   return '⚽ 기타스포츠';
+        default:         return '🏋️ 운동';
+    }
 }
 
 // ─── Reaction helpers ────────────────────────────────────────────────────────
@@ -627,6 +639,114 @@ function NoticeTab() {
     );
 }
 
+// ─── Cert Feed Tab ────────────────────────────────────────────────────────────
+function CertFeedTab() {
+    const [logs, setLogs] = useState<WorkoutLog[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getCertificationFeed(40).then(({ data }) => {
+            if (data) setLogs(data);
+            setLoading(false);
+        });
+    }, []);
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-white">
+                <span className="text-base">💪</span>
+                <span className="text-sm text-slate-500 font-medium">운동 인증 피드</span>
+                {!loading && (
+                    <span className="ml-auto text-[11px] text-slate-400">{logs.length}건</span>
+                )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                    <div className="flex justify-center items-center h-40">
+                        <Loader2 size={24} className="animate-spin text-slate-300" />
+                    </div>
+                ) : logs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 gap-2">
+                        <span className="text-4xl">💪</span>
+                        <p className="text-sm text-slate-400">아직 승인된 인증이 없습니다.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-slate-50">
+                        {logs.map((log) => {
+                            const displayName = getDisplayName(log.profiles);
+                            const initial = displayName.charAt(0).toUpperCase();
+                            const hasRealImage =
+                                !!log.proof_image_url &&
+                                log.proof_image_url !== 'admin-registered';
+
+                            return (
+                                <div key={log.id} className="px-4 py-4">
+                                    {/* User row */}
+                                    <div className="flex items-center gap-2.5 mb-3">
+                                        <div className="w-9 h-9 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-700 shrink-0 overflow-hidden">
+                                            {log.profiles?.avatar_url ? (
+                                                <img
+                                                    src={log.profiles.avatar_url}
+                                                    alt={displayName}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                initial
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-sm font-semibold text-slate-800 truncate">
+                                                    {displayName}
+                                                </span>
+                                                {log.profiles?.tier && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
+                                                        {log.profiles.tier}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 mt-0.5">
+                                                {log.workout_date} · {log.duration_minutes}분
+                                            </p>
+                                        </div>
+                                        <span className="text-[11px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full shrink-0">
+                                            {getWorkoutBadge(log.workout_type)}
+                                        </span>
+                                    </div>
+
+                                    {/* Proof image */}
+                                    {hasRealImage && (
+                                        <a
+                                            href={log.proof_image_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block mb-3 rounded-xl overflow-hidden bg-slate-100"
+                                        >
+                                            <img
+                                                src={log.proof_image_url}
+                                                alt="인증 사진"
+                                                className="w-full max-h-72 object-cover"
+                                            />
+                                        </a>
+                                    )}
+
+                                    {/* Comment */}
+                                    {log.comment && (
+                                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                            {log.comment}
+                                        </p>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ─── Board Tab ────────────────────────────────────────────────────────────────
 function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
     const [posts, setPosts] = useState<Post[]>([]);
@@ -912,7 +1032,7 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
 export default function CommunityPage() {
     const router = useRouter();
     const { user, isAuthenticated } = useAuthStore();
-    const [tab, setTab] = useState<"chat" | "board" | "notice">("chat");
+    const [tab, setTab] = useState<"chat" | "board" | "notice" | "cert">("chat");
 
     useEffect(() => {
         if (!isAuthenticated) router.push("/login");
@@ -929,7 +1049,7 @@ export default function CommunityPage() {
                 <h1 className="text-xl font-black text-slate-900 mb-3">커뮤니티</h1>
                 {/* Tab Bar */}
                 <div className="flex">
-                    {(["chat", "board", "notice"] as const).map((t) => (
+                    {(["chat", "board", "notice", "cert"] as const).map((t) => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
@@ -940,7 +1060,7 @@ export default function CommunityPage() {
                                     : "border-transparent text-slate-400 hover:text-slate-600"
                             )}
                         >
-                            {t === "chat" ? "채팅" : t === "board" ? "게시판" : "공지"}
+                            {t === "chat" ? "채팅" : t === "board" ? "게시판" : t === "notice" ? "공지" : "인증"}
                         </button>
                     ))}
                 </div>
@@ -952,8 +1072,10 @@ export default function CommunityPage() {
                     <ChatTab userId={user.id} isAdmin={isAdmin} />
                 ) : tab === "board" ? (
                     <BoardTab userId={user.id} isAdmin={isAdmin} />
-                ) : (
+                ) : tab === "notice" ? (
                     <NoticeTab />
+                ) : (
+                    <CertFeedTab />
                 )}
             </div>
 

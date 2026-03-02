@@ -174,6 +174,10 @@ export default function DashboardPage() {
 
   const pendingLogs = myLogs.filter(l => l.status === 'pending');
 
+  const recentCerts = allLogs
+    .filter(l => l.status === 'approved' && l.proof_image_url !== 'admin-registered')
+    .slice(0, 3);
+
   const handleDeleteLog = async (logId: string) => {
     if (!window.confirm("이 인증 신청을 취소하시겠습니까?")) return;
     await deleteWorkoutLog(logId);
@@ -584,6 +588,73 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+        </section>
+
+        {/* Recent Cert Preview */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-md font-bold text-primary flex items-center gap-2">
+              💪 최근 운동 인증
+            </h3>
+            <button
+              onClick={() => router.push("/community")}
+              className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              더보기 <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => <div key={i} className="h-16 bg-white/50 animate-pulse rounded-xl" />)}
+            </div>
+          ) : recentCerts.length > 0 ? (
+            <div className="space-y-2">
+              {recentCerts.map((log) => {
+                const displayName = (log.profiles as any)?.display_name || (log.profiles as any)?.username || '멤버';
+                const tier = (log.profiles as any)?.tier;
+                return (
+                  <div
+                    key={log.id}
+                    onClick={() => router.push("/community")}
+                    className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.98] transition-transform"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                      <img
+                        src={log.proof_image_url}
+                        alt="인증"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-xs font-bold text-slate-800 truncate">{displayName}</span>
+                        {tier && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
+                            {tier}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md">
+                          {log.workout_type === 'running'  ? '🏃 러닝'
+                          : log.workout_type === 'gym'     ? '💪 운동완료'
+                          : log.workout_type === 'walking' ? '🚶 걷기/산책'
+                          : log.workout_type === 'yoga'    ? '🧘 요가/필라테스'
+                          :                                  '⚽ 기타스포츠'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{log.workout_date}</span>
+                      </div>
+                      {log.comment && (
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{log.comment}</p>
+                      )}
+                    </div>
+                    <ChevronRight size={14} className="text-slate-300 shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </section>
 
         {/* Rulebook Quick Link */}

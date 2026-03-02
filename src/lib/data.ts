@@ -155,6 +155,16 @@ export const updateLogStatus = async (logId: string, status: 'approved' | 'rejec
     return { data, error };
 };
 
+export const getCertificationFeed = async (limit: number = 30) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .select('*, profiles(id, username, display_name, avatar_url, tier)')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+    return { data: data as WorkoutLog[], error };
+};
+
 export const getPendingLogs = async (seasonId: string) => {
     const { data, error } = await supabase
         .from('workout_logs')
