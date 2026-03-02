@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog } from "@/lib/data";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
@@ -127,6 +127,44 @@ export default function DashboardPage() {
     return () => clearInterval(id);
   }, [activeSeason?.voting_open, activeSeason?.voting_ends_at]);
 
+  // 주 2회 미달 위험 알림 — 이번 주에 한 번만 발송 (localStorage 기반 중복 방지)
+  useEffect(() => {
+    if (isLoading || !user || isAdmin || !activeSeason) return;
+
+    const weekKey = `cert_risk_warned_${weekStart.toISOString().slice(0, 10)}`;
+    if (typeof window === 'undefined') return;
+
+    // 현재 위험 상태 재계산 (weeklyApproved / weeklyPending은 이 시점엔 아직 scope 밖이므로 직접 계산)
+    const now2 = new Date();
+    const wStart = startOfWeek(now2, { weekStartsOn: 1 });
+    const wEnd = endOfWeek(now2, { weekStartsOn: 1 });
+    const wApproved = myLogs.filter(l =>
+      l.status === 'approved' && isWithinInterval(new Date(l.workout_date), { start: wStart, end: wEnd })
+    ).length;
+    const wPending = myLogs.filter(l =>
+      l.status === 'pending' && isWithinInterval(new Date(l.workout_date), { start: wStart, end: wEnd })
+    ).length;
+    const dow = now2.getDay();
+    const dLeft = dow === 0 ? 0 : 7 - dow;
+    const needed = Math.max(0, 2 - wApproved);
+    const critical = needed > 0 && dLeft <= 1;
+    const warning = needed > 0 && !critical && dLeft <= 3 && (wApproved + wPending) < 2;
+    const atRisk = critical || warning;
+
+    if (!atRisk) return;
+    if (localStorage.getItem(weekKey)) return; // 이번 주 이미 발송됨
+
+    localStorage.setItem(weekKey, '1');
+    createNotification({
+      user_id: user.id,
+      title: critical ? '⚠️ 이번 주 인증 마감 임박!' : '📌 이번 주 운동 인증을 확인하세요',
+      content: critical
+        ? `이번 주 승인 인증이 ${wApproved}회예요. 오늘 안에 ${needed}회 더 인증해야 주 2회를 채울 수 있어요!`
+        : `목표까지 ${needed}회 더 필요해요. 이번 주가 끝나기 전에 운동 인증을 완료해 주세요.`,
+      link: '/',
+    }).then(() => setUnreadCount(prev => prev + 1));
+  }, [isLoading, myLogs, user?.id]);
+
   if (!isMounted || !isAuthenticated || !user) {
     return null;
   }
@@ -202,6 +240,17 @@ export default function DashboardPage() {
     const workDate = new Date(l.workout_date);
     return isWithinInterval(workDate, { start: weekStart, end: weekEnd });
   }).length;
+
+  // 주 2회 미달 위험 감지 (관리자 제외, 활성 시즌 있을 때만)
+  const dayOfWeek = now.getDay(); // 0=일, 1=월, ..., 6=토
+  const daysLeftInWeek = dayOfWeek === 0 ? 0 : 7 - dayOfWeek; // 오늘 포함 주말까지 남은 일수
+  const remainingNeeded = Math.max(0, 2 - weeklyApproved);
+  // 심각: 토요일(1일 남음) 또는 일요일(0일 남음)인데 미달
+  const isCertCritical = !isAdmin && !!activeSeason && remainingNeeded > 0 && daysLeftInWeek <= 1;
+  // 주의: 목/금(2~3일 남음)인데 승인+대기 합산도 부족
+  const isCertWarning = !isAdmin && !!activeSeason && remainingNeeded > 0 && !isCertCritical
+    && daysLeftInWeek <= 3 && (weeklyApproved + weeklyPending) < 2;
+  const showCertRiskBanner = isCertCritical || isCertWarning;
 
   return (
     <div className="flex flex-col min-h-screen pb-20 bg-secondary">
@@ -347,6 +396,36 @@ export default function DashboardPage() {
           }
           return null;
         })()}
+        {/* 주 2회 미달 위험 배너 */}
+        {showCertRiskBanner && (
+          <div
+            onClick={() => setShowCertModal(true)}
+            className={cn(
+              "rounded-3xl p-5 flex items-center gap-4 cursor-pointer active:scale-[0.98] transition-all shadow-lg",
+              isCertCritical
+                ? "bg-red-500 shadow-red-200 animate-pulse"
+                : "bg-orange-400 shadow-orange-200"
+            )}
+          >
+            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+              <span className="text-2xl">{isCertCritical ? "🚨" : "⚠️"}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-black text-white leading-tight">
+                {isCertCritical
+                  ? `마감 임박! 이번 주 인증 ${weeklyApproved}/2회`
+                  : `이번 주 인증이 부족해요 ${weeklyApproved}/2회`}
+              </p>
+              <p className="text-[11px] text-white/80 font-bold mt-0.5">
+                {isCertCritical
+                  ? `${daysLeftInWeek === 0 ? "오늘이 마지막 날" : "내일이면 이번 주 끝"}이에요. 지금 바로 인증하세요!`
+                  : `목표까지 ${remainingNeeded}회 더 필요해요. 지금 인증하러 가기 →`}
+              </p>
+            </div>
+            <PlusCircle size={20} className="text-white/70 shrink-0" />
+          </div>
+        )}
+
         {/* Profile Card */}
         <Card className="border-none shadow-sm overflow-hidden bg-white">
           <CardContent className="p-6">

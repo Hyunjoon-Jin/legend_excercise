@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement, Notification as AppNotification } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -428,7 +428,7 @@ export const markNotificationAsRead = async (notificationId: string) => {
     return { data, error };
 };
 
-export const createNotification = async (notif: Omit<Notification, 'id' | 'created_at' | 'is_read'>) => {
+export const createNotification = async (notif: Omit<AppNotification, 'id' | 'created_at' | 'is_read'>) => {
     const { data, error } = await supabase
         .from('notifications')
         .insert([notif]);
