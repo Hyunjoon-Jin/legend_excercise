@@ -640,9 +640,10 @@ function NoticeTab() {
 }
 
 // ─── Cert Feed Tab ────────────────────────────────────────────────────────────
-function CertFeedTab() {
+function CertFeedTab({ userId }: { userId: string }) {
     const [logs, setLogs] = useState<WorkoutLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [onlyMine, setOnlyMine] = useState(false);
 
     useEffect(() => {
         getCertificationFeed(40).then(({ data }) => {
@@ -651,14 +652,29 @@ function CertFeedTab() {
         });
     }, []);
 
+    const displayed = onlyMine ? logs.filter(l => l.user_id === userId) : logs;
+
     return (
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 bg-white">
                 <span className="text-base">💪</span>
                 <span className="text-sm text-slate-500 font-medium">운동 인증 피드</span>
-                {!loading && (
-                    <span className="ml-auto text-[11px] text-slate-400">{logs.length}건</span>
-                )}
+                <div className="ml-auto flex items-center gap-2">
+                    {!loading && (
+                        <span className="text-[11px] text-slate-400">{displayed.length}건</span>
+                    )}
+                    <button
+                        onClick={() => setOnlyMine(v => !v)}
+                        className={cn(
+                            "text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all",
+                            onlyMine
+                                ? "bg-amber-400 border-amber-400 text-white"
+                                : "bg-white border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-500"
+                        )}
+                    >
+                        내 인증만
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -666,14 +682,16 @@ function CertFeedTab() {
                     <div className="flex justify-center items-center h-40">
                         <Loader2 size={24} className="animate-spin text-slate-300" />
                     </div>
-                ) : logs.length === 0 ? (
+                ) : displayed.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-40 gap-2">
                         <span className="text-4xl">💪</span>
-                        <p className="text-sm text-slate-400">아직 승인된 인증이 없습니다.</p>
+                        <p className="text-sm text-slate-400">
+                            {onlyMine ? "아직 내 인증이 없습니다." : "아직 승인된 인증이 없습니다."}
+                        </p>
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-50">
-                        {logs.map((log) => {
+                        {displayed.map((log) => {
                             const displayName = getDisplayName(log.profiles);
                             const initial = displayName.charAt(0).toUpperCase();
                             const hasRealImage =
@@ -1082,7 +1100,7 @@ export default function CommunityPage() {
                 ) : tab === "notice" ? (
                     <NoticeTab />
                 ) : (
-                    <CertFeedTab />
+                    <CertFeedTab userId={user.id} />
                 )}
             </div>
 
