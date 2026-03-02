@@ -215,12 +215,23 @@ export const updateWorkoutLog = async (
         duration_minutes?: number;
         comment?: string;
         proof_image_url?: string;
+        proof_media_urls?: string[];
         workout_date?: string;
     }
 ) => {
     const { data, error } = await supabase
         .from('workout_logs')
         .update(updates)
+        .eq('id', logId)
+        .select()
+        .single();
+    return { data, error };
+};
+
+export const resubmitWorkoutLog = async (logId: string) => {
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .update({ status: 'pending', admin_note: null })
         .eq('id', logId)
         .select()
         .single();

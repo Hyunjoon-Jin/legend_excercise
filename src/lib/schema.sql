@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS workout_logs (
   workout_type TEXT NOT NULL CHECK (workout_type IN ('running', 'walking', 'gym', 'yoga', 'sports')),
   duration_minutes INTEGER NOT NULL,
   proof_image_url TEXT NOT NULL,
+  proof_media_urls TEXT[],
   comment TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   admin_note TEXT,

@@ -22,8 +22,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Camera, X, Loader2 } from "lucide-react";
-import Image from "next/image";
+import { Camera, X, Loader2, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { submitWorkoutLog, getActiveSeason, notifyAdmins, updateWorkoutLog } from "@/lib/data";
@@ -38,6 +37,13 @@ const certSchema = z.object({
 
 type CertFormValues = z.infer<typeof certSchema>;
 
+interface MediaItem {
+    file?: File;
+    preview: string;      // data URL (new) or remote URL (existing)
+    isVideo: boolean;
+    isExisting?: boolean; // already uploaded to storage
+}
+
 interface CertModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -45,11 +51,17 @@ interface CertModalProps {
     editingLog?: WorkoutLog;
 }
 
+function isVideoFile(file: File) {
+    return file.type.startsWith("video/");
+}
+
+function isVideoUrl(url: string) {
+    return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+}
+
 export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: CertModalProps) {
     const { user } = useAuthStore();
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+    const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [activeSeasonId, setActiveSeasonId] = useState<string | null>(null);
 
@@ -74,9 +86,16 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                 date: editingLog.workout_date || new Date().toISOString().split('T')[0],
                 comment: editingLog.comment || "",
             });
-            setExistingImageUrl(editingLog.proof_image_url || null);
-            setImageFile(null);
-            setImagePreview(null);
+            // Restore existing media
+            const items: MediaItem[] = [];
+            if (editingLog.proof_media_urls && editingLog.proof_media_urls.length > 0) {
+                editingLog.proof_media_urls.forEach(url => {
+                    items.push({ preview: url, isVideo: isVideoUrl(url), isExisting: true });
+                });
+            } else if (editingLog.proof_image_url && editingLog.proof_image_url !== 'admin-registered') {
+                items.push({ preview: editingLog.proof_image_url, isVideo: isVideoUrl(editingLog.proof_image_url), isExisting: true });
+            }
+            setMediaItems(items);
         } else {
             form.reset({
                 type: "",
@@ -84,85 +103,74 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                 date: new Date().toISOString().split('T')[0],
                 comment: "",
             });
-            setImageFile(null);
-            setImagePreview(null);
-            setExistingImageUrl(null);
-            const fetchSeason = async () => {
-                const { data } = await getActiveSeason();
-                if (data) setActiveSeasonId(data.id);
-            };
-            fetchSeason();
+            setMediaItems([]);
+            getActiveSeason().then(({ data }) => { if (data) setActiveSeasonId(data.id); });
         }
     }, [isOpen, isEditMode, editingLog]);
 
     useEffect(() => {
         if (!isOpen && !isEditMode) {
-            const fetchSeason = async () => {
-                const { data } = await getActiveSeason();
-                if (data) setActiveSeasonId(data.id);
-            };
-            fetchSeason();
+            getActiveSeason().then(({ data }) => { if (data) setActiveSeasonId(data.id); });
         }
     }, []);
 
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setImageFile(file);
-            setExistingImageUrl(null);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
+    const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length === 0) return;
+        const newItems: MediaItem[] = files.map(file => ({
+            file,
+            preview: URL.createObjectURL(file),
+            isVideo: isVideoFile(file),
+        }));
+        setMediaItems(prev => [...prev, ...newItems]);
+        e.target.value = "";
     };
 
-    const clearImage = () => {
-        setImagePreview(null);
-        setImageFile(null);
-        setExistingImageUrl(null);
+    const removeItem = (idx: number) => {
+        setMediaItems(prev => {
+            const item = prev[idx];
+            if (item.file) URL.revokeObjectURL(item.preview);
+            return prev.filter((_, i) => i !== idx);
+        });
+    };
+
+    const uploadFile = async (file: File): Promise<string> => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${user!.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const filePath = `workout-proofs/${fileName}`;
+        const { error } = await supabase.storage.from('images').upload(filePath, file);
+        if (error) throw new Error("파일 업로드 실패");
+        const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+        return publicUrl;
     };
 
     const onSubmit = async (data: CertFormValues) => {
         if (!user) return;
-
-        const hasImage = imageFile || existingImageUrl;
-        if (!hasImage) {
-            alert("인증 사진을 업로드해 주세요.");
+        if (mediaItems.length === 0) {
+            alert("인증 사진 또는 영상을 최소 1개 업로드해 주세요.");
             return;
         }
 
         setIsSubmitting(true);
 
         try {
-            let proofUrl = existingImageUrl || "";
+            // Upload new files; existing items keep their URL
+            const uploadedUrls: string[] = await Promise.all(
+                mediaItems.map(item =>
+                    item.file ? uploadFile(item.file) : Promise.resolve(item.preview)
+                )
+            );
 
-            // Upload new image if selected
-            if (imageFile) {
-                const fileExt = imageFile.name.split('.').pop();
-                const fileName = `${user.id}-${Math.random()}.${fileExt}`;
-                const filePath = `workout-proofs/${fileName}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('images')
-                    .upload(filePath, imageFile);
-
-                if (uploadError) throw new Error("이미지 업로드에 실패했습니다.");
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('images')
-                    .getPublicUrl(filePath);
-
-                proofUrl = publicUrl;
-            }
+            const firstUrl = uploadedUrls[0];
+            const allUrls = uploadedUrls;
 
             if (isEditMode && editingLog) {
                 const { error } = await updateWorkoutLog(editingLog.id, {
                     workout_type: data.type as any,
                     duration_minutes: parseInt(data.duration),
                     comment: data.comment,
-                    proof_image_url: proofUrl,
+                    proof_image_url: firstUrl,
+                    proof_media_urls: allUrls,
                     workout_date: data.date,
                 });
                 if (error) throw error;
@@ -175,9 +183,10 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                     workout_date: data.date,
                     workout_type: data.type as any,
                     duration_minutes: parseInt(data.duration),
-                    proof_image_url: proofUrl,
+                    proof_image_url: firstUrl,
+                    proof_media_urls: allUrls,
                     comment: data.comment,
-                });
+                } as any);
                 if (submitError) throw submitError;
                 const memberName = user.username || '회원';
                 await notifyAdmins(memberName, '');
@@ -193,8 +202,6 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
         }
     };
 
-    const currentPreview = imagePreview || existingImageUrl;
-
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="sm:max-w-[425px]">
@@ -205,28 +212,71 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                 </DialogHeader>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
-                    {/* Image Upload Area */}
+                    {/* Media Upload Area */}
                     <div className="space-y-2">
-                        <Label>인증 사진</Label>
-                        {currentPreview ? (
-                            <div className="relative aspect-video w-full rounded-2xl overflow-hidden border-2 border-slate-100 bg-slate-50">
-                                <Image src={currentPreview} alt="Preview" fill className="object-cover" />
-                                <button
-                                    type="button"
-                                    onClick={clearImage}
-                                    className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                                >
-                                    <X size={16} />
-                                </button>
+                        <Label>인증 사진 / 영상</Label>
+
+                        {/* Preview grid */}
+                        {mediaItems.length > 0 && (
+                            <div className="grid grid-cols-3 gap-1.5">
+                                {mediaItems.map((item, idx) => (
+                                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-slate-100">
+                                        {item.isVideo ? (
+                                            <video
+                                                src={item.preview}
+                                                className="w-full h-full object-cover"
+                                                muted
+                                            />
+                                        ) : (
+                                            <img
+                                                src={item.preview}
+                                                alt={`미디어 ${idx + 1}`}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeItem(idx)}
+                                            className="absolute top-1 right-1 p-0.5 bg-black/60 text-white rounded-full"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                        {item.isVideo && (
+                                            <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[9px] px-1 rounded">영상</div>
+                                        )}
+                                    </div>
+                                ))}
+
+                                {/* Add more button */}
+                                <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                    <Plus size={18} className="text-slate-300 mb-0.5" />
+                                    <span className="text-[9px] text-slate-300">추가</span>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*,video/*"
+                                        multiple
+                                        onChange={handleFilesChange}
+                                    />
+                                </label>
                             </div>
-                        ) : (
+                        )}
+
+                        {/* Empty state upload area */}
+                        {mediaItems.length === 0 && (
                             <label className="flex flex-col items-center justify-center w-full aspect-video rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
                                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                     <Camera className="w-10 h-10 text-slate-300 mb-2" />
-                                    <p className="text-sm text-slate-400">사진을 터치하여 업로드</p>
+                                    <p className="text-sm text-slate-400">사진 / 영상 선택 (여러 장 가능)</p>
                                     <p className="text-xs text-slate-300 mt-1">심박수, 시간, 날짜 포함 권장</p>
                                 </div>
-                                <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    accept="image/*,video/*"
+                                    multiple
+                                    onChange={handleFilesChange}
+                                />
                             </label>
                         )}
                     </div>

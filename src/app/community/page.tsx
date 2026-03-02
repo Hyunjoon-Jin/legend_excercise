@@ -694,9 +694,13 @@ function CertFeedTab({ userId }: { userId: string }) {
                         {displayed.map((log) => {
                             const displayName = getDisplayName(log.profiles);
                             const initial = displayName.charAt(0).toUpperCase();
-                            const hasRealImage =
-                                !!log.proof_image_url &&
-                                log.proof_image_url !== 'admin-registered';
+                            // Use proof_media_urls if available, else fall back to proof_image_url
+                            const mediaUrls: string[] = (log.proof_media_urls && log.proof_media_urls.length > 0)
+                                ? log.proof_media_urls
+                                : (log.proof_image_url && log.proof_image_url !== 'admin-registered')
+                                    ? [log.proof_image_url]
+                                    : [];
+                            const hasRealImage = mediaUrls.length > 0;
 
                             return (
                                 <div key={log.id} className="px-4 py-4">
@@ -733,20 +737,42 @@ function CertFeedTab({ userId }: { userId: string }) {
                                         </span>
                                     </div>
 
-                                    {/* Proof image */}
+                                    {/* Proof media */}
                                     {hasRealImage && (
-                                        <a
-                                            href={log.proof_image_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block mb-3 rounded-xl overflow-hidden bg-slate-100"
-                                        >
-                                            <img
-                                                src={log.proof_image_url}
-                                                alt="인증 사진"
-                                                className="w-full max-h-72 object-cover"
-                                            />
-                                        </a>
+                                        <div className={cn(
+                                            "mb-3",
+                                            mediaUrls.length === 1 ? "" : "grid grid-cols-2 gap-1"
+                                        )}>
+                                            {mediaUrls.map((url, mi) => (
+                                                isVideoUrl(url) ? (
+                                                    <video
+                                                        key={mi}
+                                                        src={url}
+                                                        controls
+                                                        className={cn(
+                                                            "rounded-xl bg-slate-100 w-full",
+                                                            mediaUrls.length === 1 ? "max-h-72" : "aspect-square object-cover"
+                                                        )}
+                                                    />
+                                                ) : (
+                                                    <a key={mi} href={url} target="_blank" rel="noopener noreferrer"
+                                                        className={cn(
+                                                            "block rounded-xl overflow-hidden bg-slate-100",
+                                                            mediaUrls.length > 1 && "aspect-square"
+                                                        )}
+                                                    >
+                                                        <img
+                                                            src={url}
+                                                            alt={`인증 사진 ${mi + 1}`}
+                                                            className={cn(
+                                                                "w-full object-cover",
+                                                                mediaUrls.length === 1 ? "max-h-72" : "h-full"
+                                                            )}
+                                                        />
+                                                    </a>
+                                                )
+                                            ))}
+                                        </div>
                                     )}
 
                                     {/* Comment */}

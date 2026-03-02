@@ -35,6 +35,7 @@ export interface WorkoutLog {
     workout_type: WorkoutType;
     duration_minutes: number;
     proof_image_url: string;
+    proof_media_urls?: string[];
     comment?: string;
     status: LogStatus;
     admin_note?: string;

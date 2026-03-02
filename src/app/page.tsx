@@ -20,11 +20,12 @@ import {
   X,
   Pencil,
   Trash2,
+  RefreshCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
-import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification, getLatestAnnouncement } from "@/lib/data";
+import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification, getLatestAnnouncement, notifyAdmins, resubmitWorkoutLog } from "@/lib/data";
 import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
@@ -223,6 +224,36 @@ export default function DashboardPage() {
     if (!window.confirm("이 인증 신청을 취소하시겠습니까?")) return;
     await deleteWorkoutLog(logId);
     setMyLogs(prev => prev.filter(l => l.id !== logId));
+  };
+
+  const handleNotifyAdmin = async (logId: string) => {
+    const key = `cert_notified_${logId}`;
+    const last = localStorage.getItem(key);
+    if (last && Date.now() - Number(last) < 2 * 60 * 60 * 1000) {
+      alert("2시간 안에 이미 알림을 보냈습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+    await notifyAdmins(user?.username || '회원', logId);
+    localStorage.setItem(key, String(Date.now()));
+    alert("관리자에게 승인 요청 알림을 보냈습니다.");
+  };
+
+  const handleResubmit = async (logId: string) => {
+    const { error } = await resubmitWorkoutLog(logId);
+    if (error) { alert("오류가 발생했습니다."); return; }
+    setMyLogs(prev => prev.map(l => l.id === logId ? { ...l, status: 'pending', admin_note: undefined } : l));
+    await notifyAdmins(user?.username || '회원', logId);
+    alert("재요청이 완료되었습니다! 관리자 승인을 기다려주세요.");
+  };
+
+  const workoutTypeLabel = (type: string) => {
+    switch (type) {
+      case 'running': return '러닝';
+      case 'gym': return '운동완료';
+      case 'walking': return '걷기/산책';
+      case 'yoga': return '요가/필라테스';
+      default: return '기타';
+    }
   };
 
   const approvedCount = myLogs.filter(l => l.status === 'approved').length;
@@ -492,39 +523,82 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Pending Certs */}
-        {pendingLogs.length > 0 && (
+        {/* My Cert History */}
+        {myLogs.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-700">대기 중인 인증</span>
-              <Badge className="bg-amber-100 text-amber-700 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
-                {pendingLogs.length}건
+              <span className="text-sm font-bold text-slate-700">내 인증 내역</span>
+              <Badge className="bg-slate-100 text-slate-600 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
+                {myLogs.length}건
               </Badge>
             </div>
             <div className="space-y-1.5">
-              {pendingLogs.map(log => (
-                <div key={log.id} className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 shadow-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-                    <span className="text-xs font-medium text-slate-700 truncate">
-                      {log.workout_date} · {log.workout_type === 'running' ? '러닝' : log.workout_type === 'gym' ? '운동완료' : log.workout_type === 'walking' ? '걷기/산책' : log.workout_type === 'yoga' ? '요가/필라테스' : '기타'}
-                    </span>
-                    <span className="text-[10px] text-slate-400 shrink-0">{log.duration_minutes}분</span>
+              {myLogs.slice(0, 10).map(log => (
+                <div key={log.id} className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={cn(
+                        "w-1.5 h-1.5 rounded-full shrink-0",
+                        log.status === 'approved' ? "bg-green-400" :
+                        log.status === 'rejected' ? "bg-red-400" : "bg-amber-400"
+                      )} />
+                      <span className="text-xs font-medium text-slate-700 truncate">
+                        {log.workout_date} · {workoutTypeLabel(log.workout_type)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 shrink-0">{log.duration_minutes}분</span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Status badge */}
+                      <span className={cn(
+                        "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                        log.status === 'approved' ? "bg-green-100 text-green-700" :
+                        log.status === 'rejected' ? "bg-red-100 text-red-600" :
+                        "bg-amber-100 text-amber-700"
+                      )}>
+                        {log.status === 'approved' ? '승인' : log.status === 'rejected' ? '반려' : '대기'}
+                      </span>
+                      {/* Actions */}
+                      {log.status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => handleNotifyAdmin(log.id)}
+                            title="관리자에게 승인 요청"
+                            className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Bell size={13} />
+                          </button>
+                          <button
+                            onClick={() => setEditingLog(log)}
+                            className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                      {log.status === 'rejected' && (
+                        <button
+                          onClick={() => handleResubmit(log.id)}
+                          title="승인 재요청"
+                          className="flex items-center gap-0.5 p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors text-[10px] font-bold"
+                        >
+                          <RefreshCcw size={11} />
+                          재요청
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      onClick={() => setEditingLog(log)}
-                      className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteLog(log.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  {/* Rejection note */}
+                  {log.status === 'rejected' && log.admin_note && (
+                    <p className="text-[10px] text-red-400 mt-1.5 ml-3.5 leading-relaxed">
+                      반려 사유: {log.admin_note}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
