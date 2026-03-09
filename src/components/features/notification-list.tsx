@@ -46,10 +46,11 @@ export function NotificationList({ onClose }: NotificationListProps) {
         );
     };
 
-    const getIcon = (type: AppNotification['type']) => {
-        if (type.includes("우승") || type.includes("MVP")) return <Trophy className="text-amber-500" size={18} />;
-        if (type.includes("인증") || type.includes("등록")) return <CheckCheck className="text-green-500" size={18} />;
-        if (type.includes("캘린더") || type.includes("시즌")) return <CalendarIcon className="text-blue-500" size={18} />;
+    const getIcon = (type: AppNotification['type'], title: string) => {
+        const checkStr = (type || '') + ' ' + (title || '');
+        if (checkStr.includes("우승") || checkStr.includes("MVP")) return <Trophy className="text-amber-500" size={18} />;
+        if (checkStr.includes("인증") || checkStr.includes("등록") || checkStr.includes("반려")) return <CheckCheck className="text-green-500" size={18} />;
+        if (checkStr.includes("캘린더") || checkStr.includes("시즌")) return <CalendarIcon className="text-blue-500" size={18} />;
         return <Info className="text-slate-400" size={18} />;
     };
 
@@ -77,16 +78,16 @@ export function NotificationList({ onClose }: NotificationListProps) {
                                 key={n.id}
                                 onClick={() => handleRead(n.id)}
                                 className={cn(
-                                    "p-4 flex gap-3 transition-colors active:bg-slate-50",
-                                    !n.is_read ? "bg-amber-50/30" : "opacity-60"
+                                    "p-4 flex gap-3 transition-colors active:bg-slate-50 cursor-pointer",
+                                    !n.is_read ? "bg-amber-50/40" : "opacity-70"
                                 )}
                             >
-                                <div className="mt-1">{getIcon(n.type)}</div>
+                                <div className="mt-1">{getIcon(n.type, n.title)}</div>
                                 <div className="flex-1 space-y-1">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-sm font-bold text-primary">{n.title}</p>
+                                        <p className="text-sm font-bold text-slate-800">{n.title}</p>
                                         <p className="text-[10px] text-slate-400">
-                                            {format(new Date(n.created_at), "M월 d일 HH:mm", { locale: ko })}
+                                            {n.created_at ? format(new Date(n.created_at), "M월 d일 HH:mm", { locale: ko }) : ''}
                                         </p>
                                     </div>
                                     <p className="text-xs text-slate-600 leading-relaxed">{n.content}</p>

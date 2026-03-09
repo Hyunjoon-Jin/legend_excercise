@@ -302,14 +302,14 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3">
             {permission === 'default' && !isSubscribed && (
-              <Button
-                variant="outline"
-                size="sm"
+              <button
                 onClick={subscribeToPush}
-                className="h-8 rounded-full border-accent text-accent hover:bg-accent/10 text-xs font-bold px-3 border-2"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700 rounded-full text-[11px] font-semibold transition-all border border-slate-200 shadow-sm"
+                title="실시간 푸시 알림 켜기"
               >
-                🔔 알림 켜기
-              </Button>
+                <Bell size={12} className="text-amber-500" />
+                알림 켜기
+              </button>
             )}
             <button
               onClick={() => setShowNotifList(true)}
