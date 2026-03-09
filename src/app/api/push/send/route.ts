@@ -48,8 +48,7 @@ export async function POST(req: Request) {
         const notificationPayload = JSON.stringify({
             title,
             body: content,
-            url: link || '/',
-            icon: '/icon-192x192.png'
+            url: link || '/'
         });
 
         const sendPromises = subscriptions.map((sub: any) => {

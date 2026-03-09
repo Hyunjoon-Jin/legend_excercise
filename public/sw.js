@@ -1,19 +1,20 @@
 self.addEventListener('push', function (event) {
     if (event.data) {
-        const data = event.data.json();
-        const options = {
-            body: data.body,
-            icon: data.icon || '/icon-192x192.png',
-            badge: '/icon-192x192.png',
-            vibrate: [100, 50, 100],
-            data: {
-                dateOfArrival: Date.now(),
-                primaryKey: '2',
-                url: data.url || '/'
-            },
-            requireInteraction: true // Keep the notification open until the user interacts with it
-        };
-        event.waitUntil(self.registration.showNotification(data.title, options));
+        try {
+            const data = event.data.json();
+            const options = {
+                body: data.body,
+                vibrate: [100, 50, 100],
+                data: {
+                    dateOfArrival: Date.now(),
+                    primaryKey: '2',
+                    url: data.url || '/'
+                }
+            };
+            event.waitUntil(self.registration.showNotification(data.title || 'Legend 알림', options));
+        } catch (e) {
+            console.error('Error in push event:', e);
+        }
     }
 });
 
