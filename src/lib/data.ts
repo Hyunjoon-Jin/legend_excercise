@@ -682,6 +682,57 @@ export const deleteComment = async (commentId: string, userId: string) => {
     return { data, error };
 };
 
+// --- Workout Log Comments ---
+export const getWorkoutLogComments = async (logId: string) => {
+    const { data, error } = await supabase
+        .from('workout_log_comments')
+        .select('*, profiles(id, username, display_name, avatar_url)')
+        .eq('log_id', logId)
+        .order('created_at', { ascending: true });
+    return { data, error };
+};
+
+export const createWorkoutLogComment = async (logId: string, userId: string, content: string, authorId?: string) => {
+    const { data, error } = await supabase
+        .from('workout_log_comments')
+        .insert([{ log_id: logId, user_id: userId, content }])
+        .select('*, profiles(id, username, display_name, avatar_url)')
+        .single();
+
+    if (data && !error && authorId && userId !== authorId) {
+        // notify the author
+        await createNotification({
+            type: 'reply',
+            user_id: authorId,
+            title: '인증글 새 댓글',
+            content: `회원님의 운동 인증에 새로운 댓글이 달렸습니다.`,
+            link: '/community?tab=cert',
+        });
+
+        fetch('/api/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetUserId: authorId,
+                title: '인증글 새 댓글 💬',
+                content: `회원님의 운동 인증에 새로운 댓글이 달렸습니다.`,
+                link: '/community?tab=cert'
+            })
+        }).catch(console.error);
+    }
+
+    return { data, error };
+};
+
+export const deleteWorkoutLogComment = async (commentId: string, userId: string) => {
+    const { data, error } = await supabase
+        .from('workout_log_comments')
+        .delete()
+        .eq('id', commentId)
+        .eq('user_id', userId);
+    return { data, error };
+};
+
 export const getMyLike = async (postId: string, userId: string) => {
     const { data, error } = await supabase
         .from('post_likes')
@@ -724,7 +775,7 @@ export const toggleLike = async (postId: string, userId: string) => {
 
 // --- Reactions ---
 export const getReactionsForTargets = async (
-    targetType: 'chat' | 'post' | 'comment',
+    targetType: 'chat' | 'post' | 'comment' | 'workout_log',
     targetIds: string[]
 ) => {
     if (targetIds.length === 0) return { data: [] as { target_id: string; user_id: string; emoji: string }[], error: null };
@@ -737,10 +788,11 @@ export const getReactionsForTargets = async (
 };
 
 export const toggleReaction = async (
-    targetType: 'chat' | 'post' | 'comment',
+    targetType: 'chat' | 'post' | 'comment' | 'workout_log',
     targetId: string,
     userId: string,
-    emoji: string
+    emoji: string,
+    authorId?: string
 ) => {
     const { data: existing } = await supabase
         .from('reactions')
@@ -754,7 +806,30 @@ export const toggleReaction = async (
         await supabase.from('reactions').delete().eq('id', existing.id);
         return { added: false };
     }
-    await supabase.from('reactions').insert([{ target_type: targetType, target_id: targetId, user_id: userId, emoji }]);
+    const { data: newReaction, error } = await supabase.from('reactions').insert([{ target_type: targetType, target_id: targetId, user_id: userId, emoji }]).select().single();
+
+    // Notify if workout_log
+    if (newReaction && !error && targetType === 'workout_log' && authorId && userId !== authorId) {
+        await createNotification({
+            type: 'reaction',
+            user_id: authorId,
+            title: '인증글 새 리액션',
+            content: `회원님의 운동 인증에 누군가 ${emoji} 리액션을 남겼습니다.`,
+            link: '/community?tab=cert',
+        });
+
+        fetch('/api/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetUserId: authorId,
+                title: '인증글 새 리액션',
+                content: `회원님의 운동 인증에 누군가 ${emoji} 리액션을 남겼습니다.`,
+                link: '/community?tab=cert'
+            })
+        }).catch(console.error);
+    }
+
     return { added: true };
 };
 

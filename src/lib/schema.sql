@@ -232,12 +232,11 @@ ALTER TABLE seasons ADD COLUMN IF NOT EXISTS voting_ends_at TIMESTAMP WITH TIME 
 -- 12. Posts 테이블 미디어 URL 컬럼 추가 (사진/영상 첨부)
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_urls TEXT[] DEFAULT '{}';
 
--- 13. Reactions (채팅/게시물/댓글 이모지 리액션)
--- target_type: 'chat' | 'post' | 'comment'
+-- 13. Reactions (채팅, 게시글, 댓글, 인증글 리액션)
 CREATE TABLE IF NOT EXISTS reactions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  target_type TEXT NOT NULL CHECK (target_type IN ('chat', 'post', 'comment')),
-  target_id TEXT NOT NULL,
+  target_type TEXT NOT NULL CHECK (target_type IN ('chat', 'post', 'comment', 'workout_log')),
+  target_id UUID NOT NULL,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   emoji TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -245,7 +244,7 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 ALTER TABLE reactions DISABLE ROW LEVEL SECURITY;
 
--- 14. Announcements (관리자 공지사항)
+-- 14. Announcements (공지사항)
 CREATE TABLE IF NOT EXISTS announcements (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
@@ -254,3 +253,13 @@ CREATE TABLE IF NOT EXISTS announcements (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE announcements DISABLE ROW LEVEL SECURITY;
+
+-- 15. Workout Log Comments (인증글 댓글)
+CREATE TABLE IF NOT EXISTS workout_log_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  log_id UUID REFERENCES workout_logs(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE workout_log_comments DISABLE ROW LEVEL SECURITY;

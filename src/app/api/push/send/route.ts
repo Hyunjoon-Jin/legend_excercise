@@ -8,16 +8,23 @@ const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-webpush.setVapidDetails(
-    'mailto:test@example.com',
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!
-);
+// Initialization moved inside POST handler to prevent build-time errors
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { targetUserId, title, content, link } = body;
+
+        if (!process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+            console.warn('VAPID keys not configured. Push notification aborted.');
+            return NextResponse.json({ error: 'Web Push not configured' }, { status: 500 });
+        }
+
+        webpush.setVapidDetails(
+            'mailto:test@example.com',
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+            process.env.VAPID_PRIVATE_KEY
+        );
 
         let query = supabase.from('user_subscriptions').select('*');
 

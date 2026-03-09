@@ -118,9 +118,18 @@ export interface PostLike {
     created_at: string;
 }
 
+export interface WorkoutLogComment {
+    id: string;
+    log_id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    profiles?: Profile;
+}
+
 export interface Reaction {
     id: string;
-    target_type: 'chat' | 'post' | 'comment';
+    target_type: 'chat' | 'post' | 'comment' | 'workout_log';
     target_id: string;
     user_id: string;
     emoji: string;

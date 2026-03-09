@@ -24,8 +24,11 @@ import {
     toggleReaction,
     getAnnouncements,
     getCertificationFeed,
+    getWorkoutLogComments,
+    createWorkoutLogComment,
+    deleteWorkoutLogComment,
 } from "@/lib/data";
-import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement, WorkoutLog } from "@/types/database";
+import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement, WorkoutLog, WorkoutLogComment } from "@/types/database";
 import { ReactionBar } from "@/components/features/reaction-bar";
 import { cn } from "@/lib/utils";
 import {
@@ -68,12 +71,12 @@ function isVideoUrl(url: string) {
 
 function getWorkoutBadge(type: WorkoutLog['workout_type']): string {
     switch (type) {
-        case 'running':  return '🏃 러닝';
-        case 'gym':      return '💪 운동완료';
-        case 'walking':  return '🚶 걷기/산책';
-        case 'yoga':     return '🧘 요가/필라테스';
-        case 'sports':   return '⚽ 기타스포츠';
-        default:         return '🏋️ 운동';
+        case 'running': return '🏃 러닝';
+        case 'gym': return '💪 운동완료';
+        case 'walking': return '🚶 걷기/산책';
+        case 'yoga': return '🧘 요가/필라테스';
+        case 'sports': return '⚽ 기타스포츠';
+        default: return '🏋️ 운동';
     }
 }
 
@@ -640,7 +643,229 @@ function NoticeTab() {
 }
 
 // ─── Cert Feed Tab ────────────────────────────────────────────────────────────
-function CertFeedTab({ userId }: { userId: string }) {
+
+function CertFeedItem({ log, userId, isAdmin }: { log: WorkoutLog; userId: string; isAdmin: boolean }) {
+    const [showComments, setShowComments] = useState(false);
+    const [comments, setComments] = useState<WorkoutLogComment[]>([]);
+    const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({});
+    const [commentInput, setCommentInput] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+    const [loadingComments, setLoadingComments] = useState(false);
+
+    useEffect(() => {
+        // Load initial reactions for this log
+        getReactionsForTargets('workout_log', [log.id]).then(({ data }) => {
+            if (data) setReactionsMap(buildReactionsMap(data, userId));
+        });
+    }, [log.id, userId]);
+
+    const handleToggleComments = async () => {
+        if (!showComments && comments.length === 0) {
+            setLoadingComments(true);
+            const [{ data: cData }, { data: rData }] = await Promise.all([
+                getWorkoutLogComments(log.id),
+                // We could also fetch reactions for comments here, but for simplicity we'll just show comments first.
+                // Or let's just fetch comment reactions if we really wanted to.
+                Promise.resolve({ data: [] as any })
+            ]);
+            if (cData) setComments(cData);
+            setLoadingComments(false);
+        }
+        setShowComments(!showComments);
+    };
+
+    const handleComment = async () => {
+        const text = commentInput.trim();
+        if (!text || submitting) return;
+        setSubmitting(true);
+        const { data } = await createWorkoutLogComment(log.id, userId, text, log.user_id);
+        if (data) setComments(prev => [...prev, data]);
+        setCommentInput("");
+        setSubmitting(false);
+    };
+
+    const handleDeleteComment = async (commentId: string, commentUserId: string) => {
+        if (commentUserId !== userId && !isAdmin) return;
+        await deleteWorkoutLogComment(commentId, commentUserId === userId ? userId : commentUserId);
+        setComments(prev => prev.filter(c => c.id !== commentId));
+    };
+
+    const handleLogReaction = (emoji: string) => {
+        setReactionsMap(prev => optimisticToggle(prev, log.id, emoji));
+        toggleReaction("workout_log", log.id, userId, emoji, log.user_id);
+    };
+
+    const displayName = getDisplayName(log.profiles);
+    const initial = displayName.charAt(0).toUpperCase();
+    const mediaUrls: string[] = (log.proof_media_urls && log.proof_media_urls.length > 0)
+        ? log.proof_media_urls
+        : (log.proof_image_url && log.proof_image_url !== 'admin-registered')
+            ? [log.proof_image_url]
+            : [];
+    const hasRealImage = mediaUrls.length > 0;
+    const msgReactions = reactionsMap[log.id] || [];
+
+    return (
+        <div className="px-4 py-4">
+            {/* User row */}
+            <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-9 h-9 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-700 shrink-0 overflow-hidden">
+                    {log.profiles?.avatar_url ? (
+                        <img
+                            src={log.profiles.avatar_url}
+                            alt={displayName}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        initial
+                    )}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-slate-800 truncate">
+                            {displayName}
+                        </span>
+                        {log.profiles?.tier && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
+                                {log.profiles.tier}
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                        {log.workout_date} · {log.duration_minutes}분
+                    </p>
+                </div>
+                <span className="text-[11px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full shrink-0">
+                    {getWorkoutBadge(log.workout_type)}
+                </span>
+            </div>
+
+            {/* Proof media */}
+            {hasRealImage && (
+                <div className={cn(
+                    "mb-3",
+                    mediaUrls.length === 1 ? "" : "grid grid-cols-2 gap-1"
+                )}>
+                    {mediaUrls.map((url, mi) => (
+                        isVideoUrl(url) ? (
+                            <video
+                                key={mi}
+                                src={url}
+                                controls
+                                className={cn(
+                                    "rounded-xl bg-slate-100 w-full",
+                                    mediaUrls.length === 1 ? "max-h-72" : "aspect-square object-cover"
+                                )}
+                            />
+                        ) : (
+                            <a key={mi} href={url} target="_blank" rel="noopener noreferrer"
+                                className={cn(
+                                    "block rounded-xl overflow-hidden bg-slate-100",
+                                    mediaUrls.length > 1 && "aspect-square"
+                                )}
+                            >
+                                <img
+                                    src={url}
+                                    alt={`인증 사진 ${mi + 1}`}
+                                    className={cn(
+                                        "w-full object-cover",
+                                        mediaUrls.length === 1 ? "max-h-72" : "h-full"
+                                    )}
+                                />
+                            </a>
+                        )
+                    ))}
+                </div>
+            )}
+
+            {/* Comment Body */}
+            {log.comment && (
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap mb-3">
+                    {log.comment}
+                </p>
+            )}
+
+            {/* Actions: Reaction Bar + Comment Button */}
+            <div className="flex items-center gap-3">
+                <ReactionBar
+                    groups={msgReactions}
+                    onToggle={handleLogReaction}
+                    canAdd={log.user_id !== userId}
+                />
+                <button
+                    onClick={handleToggleComments}
+                    className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1.5 rounded-md hover:bg-slate-50 transition-colors"
+                >
+                    <MessageSquare size={14} />
+                    댓글 {comments.length > 0 ? comments.length : ''}
+                </button>
+            </div>
+
+            {/* Inline Comments Section */}
+            {showComments && (
+                <div className="mt-3 bg-slate-50 rounded-xl p-3 space-y-3">
+                    {loadingComments ? (
+                        <div className="flex justify-center p-2"><Loader2 size={16} className="animate-spin text-slate-300" /></div>
+                    ) : comments.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-2">가장 먼저 댓글을 남겨보세요!</p>
+                    ) : (
+                        <div className="space-y-2.5">
+                            {comments.map(c => (
+                                <div key={c.id} className="flex gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 shrink-0">
+                                        {getDisplayName(c.profiles).charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 bg-white rounded-lg px-2.5 py-1.5 shadow-sm border border-slate-100">
+                                        <div className="flex items-center justify-between mb-0.5">
+                                            <span className="text-[11px] font-semibold text-slate-700">
+                                                {getDisplayName(c.profiles)}
+                                            </span>
+                                            {(c.user_id === userId || isAdmin) && (
+                                                <button
+                                                    onClick={() => handleDeleteComment(c.id, c.user_id)}
+                                                    className="text-slate-300 hover:text-red-400"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-slate-600 leading-relaxed">{c.content}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Comment Input */}
+                    <div className="flex gap-2">
+                        <Input
+                            value={commentInput}
+                            onChange={(e) => setCommentInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleComment();
+                                }
+                            }}
+                            placeholder="댓글 달기..."
+                            className="h-8 text-xs bg-white flex-1"
+                        />
+                        <Button
+                            size="sm"
+                            onClick={handleComment}
+                            disabled={!commentInput.trim() || submitting}
+                            className="bg-amber-400 hover:bg-amber-500 text-white h-8 px-2.5"
+                        >
+                            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function CertFeedTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
     const [logs, setLogs] = useState<WorkoutLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [onlyMine, setOnlyMine] = useState(false);
@@ -691,99 +916,9 @@ function CertFeedTab({ userId }: { userId: string }) {
                     </div>
                 ) : (
                     <div className="divide-y divide-slate-50">
-                        {displayed.map((log) => {
-                            const displayName = getDisplayName(log.profiles);
-                            const initial = displayName.charAt(0).toUpperCase();
-                            // Use proof_media_urls if available, else fall back to proof_image_url
-                            const mediaUrls: string[] = (log.proof_media_urls && log.proof_media_urls.length > 0)
-                                ? log.proof_media_urls
-                                : (log.proof_image_url && log.proof_image_url !== 'admin-registered')
-                                    ? [log.proof_image_url]
-                                    : [];
-                            const hasRealImage = mediaUrls.length > 0;
-
-                            return (
-                                <div key={log.id} className="px-4 py-4">
-                                    {/* User row */}
-                                    <div className="flex items-center gap-2.5 mb-3">
-                                        <div className="w-9 h-9 rounded-full bg-amber-200 flex items-center justify-center text-xs font-bold text-amber-700 shrink-0 overflow-hidden">
-                                            {log.profiles?.avatar_url ? (
-                                                <img
-                                                    src={log.profiles.avatar_url}
-                                                    alt={displayName}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                initial
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="text-sm font-semibold text-slate-800 truncate">
-                                                    {displayName}
-                                                </span>
-                                                {log.profiles?.tier && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
-                                                        {log.profiles.tier}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-[11px] text-slate-400 mt-0.5">
-                                                {log.workout_date} · {log.duration_minutes}분
-                                            </p>
-                                        </div>
-                                        <span className="text-[11px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full shrink-0">
-                                            {getWorkoutBadge(log.workout_type)}
-                                        </span>
-                                    </div>
-
-                                    {/* Proof media */}
-                                    {hasRealImage && (
-                                        <div className={cn(
-                                            "mb-3",
-                                            mediaUrls.length === 1 ? "" : "grid grid-cols-2 gap-1"
-                                        )}>
-                                            {mediaUrls.map((url, mi) => (
-                                                isVideoUrl(url) ? (
-                                                    <video
-                                                        key={mi}
-                                                        src={url}
-                                                        controls
-                                                        className={cn(
-                                                            "rounded-xl bg-slate-100 w-full",
-                                                            mediaUrls.length === 1 ? "max-h-72" : "aspect-square object-cover"
-                                                        )}
-                                                    />
-                                                ) : (
-                                                    <a key={mi} href={url} target="_blank" rel="noopener noreferrer"
-                                                        className={cn(
-                                                            "block rounded-xl overflow-hidden bg-slate-100",
-                                                            mediaUrls.length > 1 && "aspect-square"
-                                                        )}
-                                                    >
-                                                        <img
-                                                            src={url}
-                                                            alt={`인증 사진 ${mi + 1}`}
-                                                            className={cn(
-                                                                "w-full object-cover",
-                                                                mediaUrls.length === 1 ? "max-h-72" : "h-full"
-                                                            )}
-                                                        />
-                                                    </a>
-                                                )
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Comment */}
-                                    {log.comment && (
-                                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                                            {log.comment}
-                                        </p>
-                                    )}
-                                </div>
-                            );
-                        })}
+                        {displayed.map((log) => (
+                            <CertFeedItem key={log.id} log={log} userId={userId} isAdmin={isAdmin} />
+                        ))}
                     </div>
                 )}
             </div>
@@ -1126,7 +1261,7 @@ export default function CommunityPage() {
                 ) : tab === "notice" ? (
                     <NoticeTab />
                 ) : (
-                    <CertFeedTab userId={user.id} />
+                    <CertFeedTab userId={user.id} isAdmin={user.role === 'admin'} />
                 )}
             </div>
 
