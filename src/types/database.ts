@@ -52,13 +52,23 @@ export interface Vote {
     created_at: string;
 }
 
-export interface Notification {
+export interface AppNotification {
     id: string;
     user_id: string;
+    type: 'system' | 'mention' | 'reply' | 'reaction' | 'certification';
     title: string;
     content: string;
-    is_read: boolean;
     link?: string;
+    is_read: boolean;
+    created_at: string;
+}
+
+export interface UserSubscription {
+    id: string;
+    user_id: string; // references profiles.id
+    endpoint: string;
+    p256dh: string;
+    auth: string;
     created_at: string;
 }
 

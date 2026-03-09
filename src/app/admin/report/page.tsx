@@ -54,7 +54,8 @@ export default function AdminReportPage() {
                 const [dailyRes, rankingRes, weeklyRes] = await Promise.all([
                     getDailyReportData(season.id, dateStr),
                     getRankings(season.id, dateStr),
-                    getWeeklyStats(season.id, weekStartStr, weekEndStr)
+                    // Only fetch stats up to the selected date to prevent future data bleeding into past reports
+                    getWeeklyStats(season.id, weekStartStr, dateStr)
                 ]);
 
                 if (dailyRes.data) setDailyLogs(dailyRes.data);
@@ -139,7 +140,7 @@ export default function AdminReportPage() {
 
                     <div className="w-full overflow-x-auto pb-4">
                         <div className="scale-[0.4] origin-top-left" style={{ width: '800px', height: 'auto', marginBottom: '-55%' }}>
-                            <WeeklyStatsCard ref={weeklyRef} startDate={weekStart} endDate={weekEnd} stats={weeklyStats} />
+                            <WeeklyStatsCard ref={weeklyRef} startDate={weekStart} endDate={selectedDate} stats={weeklyStats} />
                         </div>
                     </div>
                 </div>

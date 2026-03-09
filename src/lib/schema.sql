@@ -22,6 +22,38 @@ CREATE TABLE IF NOT EXISTS seasons (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+create index idx_votes_voter on public.votes(voter_id);
+
+-- Push Subscriptions (For Web Push Notifications)
+create table public.user_subscriptions (
+    id uuid default gen_random_uuid() primary key,
+    user_id uuid references public.profiles(id) on delete cascade not null,
+    endpoint text not null,
+    p256dh text not null,
+    auth text not null,
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    unique(user_id, endpoint)
+);
+
+-- RLS for user_subscriptions
+alter table public.user_subscriptions enable row level security;
+
+create policy "Internal processes can read all subscriptions"
+    on public.user_subscriptions for select
+    using (true);
+
+create policy "Users can insert their own subscriptions"
+    on public.user_subscriptions for insert
+    with check (auth.uid() = user_id);
+
+create policy "Users can update their own subscriptions"
+    on public.user_subscriptions for update
+    using (auth.uid() = user_id);
+
+create policy "Users can delete their own subscriptions"
+    on public.user_subscriptions for delete
+    using (auth.uid() = user_id);
+
 -- 3. Workout Logs (운동 인증 기록)
 CREATE TABLE IF NOT EXISTS workout_logs (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,

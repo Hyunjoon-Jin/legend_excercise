@@ -571,13 +571,24 @@ export default function AdminPage() {
             const { error } = await updateLogStatus(logId, 'rejected', rejectLogNote || undefined);
             if (error) throw error;
             await createNotification({
+                type: 'certification',
                 user_id: userId,
                 title: '운동 인증 반려',
                 content: rejectLogNote
                     ? `운동 인증이 반려되었습니다. 사유: ${rejectLogNote}`
                     : '운동 인증이 반려되었습니다.',
                 link: '/',
-            } as any);
+            });
+            fetch('/api/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetUserId: userId,
+                    title: '운동 인증 반려',
+                    content: rejectLogNote ? `운동 인증이 반려되었습니다. 사유: ${rejectLogNote}` : '운동 인증이 반려되었습니다.',
+                    link: '/'
+                })
+            }).catch(console.error);
             setRejectingLogId(null);
             setRejectLogNote('');
             await refreshExpandedLogs();
@@ -591,11 +602,22 @@ export default function AdminPage() {
             const { error } = await updateLogStatus(log.id, 'approved');
             if (error) throw error;
             await createNotification({
+                type: 'certification',
                 user_id: log.user_id,
                 title: '운동 인증 승인',
                 content: '운동 인증이 승인되었습니다. 수고하셨어요!',
                 link: '/',
-            } as any);
+            });
+            fetch('/api/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetUserId: log.user_id,
+                    title: '운동 인증 승인',
+                    content: '운동 인증이 승인되었습니다. 수고하셨어요!',
+                    link: '/'
+                })
+            }).catch(console.error);
             await refreshExpandedLogs();
         } catch (err: any) {
             alert('승인 오류: ' + err.message);
@@ -609,11 +631,22 @@ export default function AdminPage() {
             const { error } = await updateLogStatus(log.id, 'approved');
             if (error) throw error;
             await createNotification({
+                type: 'certification',
                 user_id: log.user_id,
                 title: '운동 인증 승인',
                 content: '운동 인증이 승인되었습니다. 수고하셨어요!',
                 link: '/',
-            } as any);
+            });
+            fetch('/api/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetUserId: log.user_id,
+                    title: '운동 인증 승인',
+                    content: '운동 인증이 승인되었습니다. 수고하셨어요!',
+                    link: '/'
+                })
+            }).catch(console.error);
             setPendingLogs(prev => prev.filter(l => l.id !== log.id));
         } catch (err: any) {
             alert("승인 처리 중 오류: " + err.message);
@@ -630,11 +663,22 @@ export default function AdminPage() {
             const { error } = await updateLogStatus(log.id, 'rejected', note);
             if (error) throw error;
             await createNotification({
+                type: 'certification',
                 user_id: log.user_id,
                 title: '운동 인증 반려',
                 content: note ? `운동 인증이 반려되었습니다. 사유: ${note}` : '운동 인증이 반려되었습니다.',
                 link: '/',
-            } as any);
+            });
+            fetch('/api/push/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    targetUserId: log.user_id,
+                    title: '운동 인증 반려',
+                    content: note ? `운동 인증이 반려되었습니다. 사유: ${note}` : '운동 인증이 반려되었습니다.',
+                    link: '/'
+                })
+            }).catch(console.error);
             setPendingLogs(prev => prev.filter(l => l.id !== log.id));
             setRejectNoteMap(prev => {
                 const next = { ...prev };
@@ -1677,14 +1721,9 @@ export default function AdminPage() {
                                         if (!user) return;
                                         if (!window.confirm(`"${noticeTitle}" 공지를 모든 회원에게 발송하시겠습니까?`)) return;
                                         setIsSendingNotice(true);
-                                        const { data, error } = await sendAnnouncement(noticeTitle, noticeContent, user.id);
-                                        setIsSendingNotice(false);
+                                        const { error, data } = await sendAnnouncement(noticeTitle, noticeContent, user.id);
                                         if (error) {
                                             alert("발송 실패: " + error.message);
-                                        } else {
-                                            alert("공지가 모든 회원에게 발송되었습니다.");
-                                            setNoticeTitle('');
-                                            setNoticeContent('');
                                             if (data) setAnnouncements(prev => [data, ...prev]);
                                         }
                                     }}

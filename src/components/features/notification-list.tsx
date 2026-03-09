@@ -15,7 +15,7 @@ import {
     getNotifications,
     markNotificationAsRead
 } from "@/lib/data";
-import { Notification } from "@/types/database";
+import { AppNotification } from "@/types/database";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,7 @@ interface NotificationListProps {
 
 export function NotificationList({ onClose }: NotificationListProps) {
     const { user } = useAuthStore();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -46,10 +46,10 @@ export function NotificationList({ onClose }: NotificationListProps) {
         );
     };
 
-    const getIcon = (title: string) => {
-        if (title.includes("우승") || title.includes("MVP")) return <Trophy className="text-amber-500" size={18} />;
-        if (title.includes("인증") || title.includes("등록")) return <CheckCheck className="text-green-500" size={18} />;
-        if (title.includes("캘린더") || title.includes("시즌")) return <CalendarIcon className="text-blue-500" size={18} />;
+    const getIcon = (type: AppNotification['type']) => {
+        if (type.includes("우승") || type.includes("MVP")) return <Trophy className="text-amber-500" size={18} />;
+        if (type.includes("인증") || type.includes("등록")) return <CheckCheck className="text-green-500" size={18} />;
+        if (type.includes("캘린더") || type.includes("시즌")) return <CalendarIcon className="text-blue-500" size={18} />;
         return <Info className="text-slate-400" size={18} />;
     };
 
@@ -81,7 +81,7 @@ export function NotificationList({ onClose }: NotificationListProps) {
                                     !n.is_read ? "bg-amber-50/30" : "opacity-60"
                                 )}
                             >
-                                <div className="mt-1">{getIcon(n.title)}</div>
+                                <div className="mt-1">{getIcon(n.type)}</div>
                                 <div className="flex-1 space-y-1">
                                     <div className="flex items-center justify-between">
                                         <p className="text-sm font-bold text-primary">{n.title}</p>

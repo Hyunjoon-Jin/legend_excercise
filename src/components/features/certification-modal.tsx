@@ -165,7 +165,7 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
             const allUrls = uploadedUrls;
 
             if (isEditMode && editingLog) {
-                const { error } = await updateWorkoutLog(editingLog.id, {
+                const { error: logError } = await updateWorkoutLog(editingLog.id, {
                     workout_type: data.type as any,
                     duration_minutes: parseInt(data.duration),
                     comment: data.comment,
@@ -173,8 +173,21 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                     proof_media_urls: allUrls,
                     workout_date: data.date,
                 });
-                if (error) throw error;
-                alert("인증이 수정되었습니다.");
+                if (logError) throw logError;
+
+                // Notify everyone about the new certification
+                const displayName = user.username || '회원';
+                fetch('/api/push/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: '새로운 운동 인증 도착! 🔥',
+                        content: `${displayName}님이 운동 인증을 올렸습니다. 응원해주세요!`,
+                        link: '/community?tab=cert'
+                    })
+                }).catch(console.error);
+
+                alert("인증 신청이 완료되었습니다.");
             } else {
                 if (!activeSeasonId) throw new Error("활성 시즌이 없습니다.");
                 const { error: submitError } = await submitWorkoutLog({

@@ -25,8 +25,9 @@ import {
 import { cn } from "@/lib/utils";
 import { CertificationModal } from "@/components/features/certification-modal";
 import { NotificationList } from "@/components/features/notification-list";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification, getLatestAnnouncement, notifyAdmins, resubmitWorkoutLog } from "@/lib/data";
-import { Profile, Season, WorkoutLog, Notification, MVPPr } from "@/types/database";
+import { Profile, Season, WorkoutLog, AppNotification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
 import { ko } from "date-fns/locale";
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, logout } = useAuthStore();
   const [isMounted, setIsMounted] = useState(false);
+  const { isSubscribed, permission, subscribeToPush } = usePushNotifications();
   const [showCertModal, setShowCertModal] = useState(false);
   const [showNotifList, setShowNotifList] = useState(false);
   const [editingLog, setEditingLog] = useState<WorkoutLog | null>(null);
@@ -160,6 +162,7 @@ export default function DashboardPage() {
 
     localStorage.setItem(weekKey, '1');
     createNotification({
+      type: 'system',
       user_id: user.id,
       title: critical ? '⚠️ 이번 주 인증 마감 임박!' : '📌 이번 주 운동 인증을 확인하세요',
       content: critical
@@ -298,6 +301,16 @@ export default function DashboardPage() {
             <h1 className="text-xl font-bold text-primary">Legend</h1>
           </div>
           <div className="flex items-center gap-3">
+            {permission === 'default' && !isSubscribed && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={subscribeToPush}
+                className="h-8 rounded-full border-accent text-accent hover:bg-accent/10 text-xs font-bold px-3 border-2"
+              >
+                🔔 알림 켜기
+              </Button>
+            )}
             <button
               onClick={() => setShowNotifList(true)}
               className="relative p-2 text-primary hover:bg-slate-100 rounded-full transition-colors"
@@ -527,7 +540,7 @@ export default function DashboardPage() {
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-md font-bold text-primary flex items-center gap-2">
-              💪 최근 운동 인증
+              🔥 타 회원들의 열정을 구경해 볼까요?
             </h3>
             <button
               onClick={() => router.push("/community?tab=cert")}

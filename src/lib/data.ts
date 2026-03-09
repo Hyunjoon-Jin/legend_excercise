@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement, Notification as AppNotification } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement, AppNotification } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -829,4 +829,23 @@ export const getSeasonStatsForUser = async (userId: string): Promise<{ data: Sea
     );
 
     return { data: results, error: null };
+};
+
+// --- Push Notifications ---
+export const savePushSubscription = async (userId: string, subscription: any) => {
+    // Check if exists
+    const { data: existing } = await supabase.from('user_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('endpoint', subscription.endpoint)
+        .single();
+
+    if (existing) return { data: existing, error: null };
+
+    return await supabase.from('user_subscriptions').insert({
+        user_id: userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+    });
 };
