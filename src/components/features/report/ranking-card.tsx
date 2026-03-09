@@ -1,5 +1,4 @@
 import React from "react";
-import Image from "next/image";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -37,9 +36,9 @@ export const RankingCard = React.forwardRef<HTMLDivElement, RankingCardProps>(
                                         <div key={user.userId} className={`flex items-center justify-between p-4 rounded-xl border ${isTop3 ? 'bg-gradient-to-r from-amber-50 to-white border-amber-200' : 'bg-white border-slate-100'}`}>
                                             <div className="flex items-center gap-4">
                                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${idx === 0 ? 'bg-yellow-400 text-white shadow-md' :
-                                                        idx === 1 ? 'bg-slate-300 text-white shadow-md' :
-                                                            idx === 2 ? 'bg-amber-600 text-white shadow-md' :
-                                                                'bg-slate-100 text-slate-500'
+                                                    idx === 1 ? 'bg-slate-300 text-white shadow-md' :
+                                                        idx === 2 ? 'bg-amber-600 text-white shadow-md' :
+                                                            'bg-slate-100 text-slate-500'
                                                     }`}>
                                                     {idx + 1}
                                                 </div>

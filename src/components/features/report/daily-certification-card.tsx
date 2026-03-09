@@ -33,11 +33,10 @@ export const DailyCertificationCard = React.forwardRef<HTMLDivElement, DailyRepo
                                     <div key={log.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
                                         <div className="h-40 w-full relative bg-slate-100">
                                             {log.proof_image_url && log.proof_image_url !== 'admin-registered' ? (
-                                                <Image
+                                                <img
                                                     src={log.proof_image_url}
                                                     alt="Workout Proof"
-                                                    fill
-                                                    className="object-cover"
+                                                    className="object-cover w-full h-full"
                                                     crossOrigin="anonymous"
                                                 />
                                             ) : (
@@ -49,11 +48,10 @@ export const DailyCertificationCard = React.forwardRef<HTMLDivElement, DailyRepo
                                         <div className="p-3 flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden relative flex-shrink-0">
                                                 {log.profiles?.avatar_url ? (
-                                                    <Image
+                                                    <img
                                                         src={log.profiles.avatar_url}
                                                         alt="Avatar"
-                                                        fill
-                                                        className="object-cover"
+                                                        className="object-cover w-full h-full"
                                                         crossOrigin="anonymous"
                                                     />
                                                 ) : (

@@ -24,7 +24,7 @@ export default function AdminReportPage() {
     // Data states
     const [dailyLogs, setDailyLogs] = useState<any[]>([]);
     const [rankings, setRankings] = useState<any[]>([]);
-    const [weeklyStats, setWeeklyStats] = useState<Record<string, number>>({});
+    const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
 
     // Week bounds based on selected date
     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 }); // Monday
@@ -53,7 +53,7 @@ export default function AdminReportPage() {
                 // Fetch all required data in parallel
                 const [dailyRes, rankingRes, weeklyRes] = await Promise.all([
                     getDailyReportData(season.id, dateStr),
-                    getRankings(season.id),
+                    getRankings(season.id, dateStr),
                     getWeeklyStats(season.id, weekStartStr, weekEndStr)
                 ]);
 

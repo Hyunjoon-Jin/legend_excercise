@@ -258,7 +258,10 @@ export const getWeeklyStats = async (seasonId: string, startDateStr: string, end
     // Fetch all approved logs between start and end date for the season
     const { data, error } = await supabase
         .from('workout_logs')
-        .select('workout_date')
+        .select(`
+            user_id,
+            profiles(username, display_name, avatar_url, tier)
+        `)
         .eq('season_id', seasonId)
         .eq('status', 'approved')
         .gte('workout_date', startDateStr)
@@ -266,27 +269,47 @@ export const getWeeklyStats = async (seasonId: string, startDateStr: string, end
 
     if (error) return { data: null, error };
 
-    // Group by date
-    const stats = (data || []).reduce((acc: Record<string, number>, log) => {
-        acc[log.workout_date] = (acc[log.workout_date] || 0) + 1;
+    // Group by user_id
+    const stats: Record<string, any> = (data || []).reduce((acc: any, log: any) => {
+        const uid = log.user_id;
+        if (!acc[uid]) {
+            acc[uid] = {
+                user_id: uid,
+                count: 0,
+                profile: log.profiles
+            };
+        }
+        acc[uid].count += 1;
         return acc;
     }, {});
 
-    return { data: stats, error: null };
+    // Convert to array and sort by count descending
+    const sortedStats = Object.values(stats).sort((a: any, b: any) => b.count - a.count);
+
+    return { data: sortedStats, error: null };
 };
 
 // --- Rankings ---
-export const getRankings = async (seasonId: string) => {
+export const getRankings = async (seasonId: string, endDateStr?: string) => {
+    let logsQuery = supabase.from('workout_logs')
+        .select('user_id, workout_date, profiles(username, tier)')
+        .eq('season_id', seasonId)
+        .eq('status', 'approved');
+
+    let votesQuery = supabase.from('votes')
+        .select('candidate_id, created_at')
+        .eq('season_id', seasonId);
+
+    if (endDateStr) {
+        logsQuery = logsQuery.lte('workout_date', endDateStr);
+        votesQuery = votesQuery.lte('created_at', `${endDateStr}T23:59:59.999Z`);
+    }
+
     // 1. Fetch Season, Logs, and Votes in parallel
     const [seasonRes, logsRes, votesRes] = await Promise.all([
         supabase.from('seasons').select('*').eq('id', seasonId).single(),
-        supabase.from('workout_logs')
-            .select('user_id, workout_date, profiles(username, tier)')
-            .eq('season_id', seasonId)
-            .eq('status', 'approved'),
-        supabase.from('votes')
-            .select('candidate_id')
-            .eq('season_id', seasonId)
+        logsQuery,
+        votesQuery
     ]);
 
     if (logsRes.error) return { data: null, error: logsRes.error };
