@@ -31,12 +31,12 @@ export const DailyCertificationCard = React.forwardRef<HTMLDivElement, DailyRepo
                             <div className="grid grid-cols-3 gap-4">
                                 {logs.map((log) => (
                                     <div key={log.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden flex flex-col">
-                                        <div className="h-40 w-full relative bg-slate-100">
+                                        <div className="h-48 w-full relative bg-slate-900">
                                             {log.proof_image_url && log.proof_image_url !== 'admin-registered' ? (
                                                 <img
                                                     src={log.proof_image_url}
                                                     alt="Workout Proof"
-                                                    className="object-cover w-full h-full"
+                                                    className="object-contain w-full h-full"
                                                     crossOrigin="anonymous"
                                                 />
                                             ) : (
@@ -77,6 +77,15 @@ export const DailyCertificationCard = React.forwardRef<HTMLDivElement, DailyRepo
                                                 </p>
                                             </div>
                                         </div>
+                                        {log.comment && (
+                                            <div className="px-3 pb-3 mt-auto">
+                                                <div className="bg-slate-50 rounded-lg p-2 border border-slate-100">
+                                                    <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                                                        "{log.comment}"
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
