@@ -523,6 +523,73 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Recent Cert Preview */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-md font-bold text-primary flex items-center gap-2">
+              💪 최근 운동 인증
+            </h3>
+            <button
+              onClick={() => router.push("/community?tab=cert")}
+              className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              더보기 <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => <div key={i} className="h-16 bg-white/50 animate-pulse rounded-xl" />)}
+            </div>
+          ) : recentCerts.length > 0 ? (
+            <div className="space-y-2">
+              {recentCerts.map((log) => {
+                const displayName = (log.profiles as any)?.display_name || (log.profiles as any)?.username || '멤버';
+                const tier = (log.profiles as any)?.tier;
+                return (
+                  <div
+                    key={log.id}
+                    onClick={() => router.push("/community?tab=cert")}
+                    className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.98] transition-transform"
+                  >
+                    <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0">
+                      <img
+                        src={log.proof_image_url}
+                        alt="인증"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-xs font-bold text-slate-800 truncate">{displayName}</span>
+                        {tier && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
+                            {tier}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md">
+                          {log.workout_type === 'running' ? '🏃 러닝'
+                            : log.workout_type === 'gym' ? '💪 운동완료'
+                              : log.workout_type === 'walking' ? '🚶 걷기/산책'
+                                : log.workout_type === 'yoga' ? '🧘 요가/필라테스'
+                                  : '⚽ 기타스포츠'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{log.workout_date}</span>
+                      </div>
+                      {log.comment && (
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{log.comment}</p>
+                      )}
+                    </div>
+                    <ChevronRight size={14} className="text-slate-300 shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
         {/* My Cert History */}
         {myLogs.length > 0 && (
           <div className="space-y-2">
@@ -540,7 +607,7 @@ export default function DashboardPage() {
                       <div className={cn(
                         "w-1.5 h-1.5 rounded-full shrink-0",
                         log.status === 'approved' ? "bg-green-400" :
-                        log.status === 'rejected' ? "bg-red-400" : "bg-amber-400"
+                          log.status === 'rejected' ? "bg-red-400" : "bg-amber-400"
                       )} />
                       <span className="text-xs font-medium text-slate-700 truncate">
                         {log.workout_date} · {workoutTypeLabel(log.workout_type)}
@@ -552,8 +619,8 @@ export default function DashboardPage() {
                       <span className={cn(
                         "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
                         log.status === 'approved' ? "bg-green-100 text-green-700" :
-                        log.status === 'rejected' ? "bg-red-100 text-red-600" :
-                        "bg-amber-100 text-amber-700"
+                          log.status === 'rejected' ? "bg-red-100 text-red-600" :
+                            "bg-amber-100 text-amber-700"
                       )}>
                         {log.status === 'approved' ? '승인' : log.status === 'rejected' ? '반려' : '대기'}
                       </span>
@@ -764,72 +831,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Recent Cert Preview */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-md font-bold text-primary flex items-center gap-2">
-              💪 최근 운동 인증
-            </h3>
-            <button
-              onClick={() => router.push("/community?tab=cert")}
-              className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
-            >
-              더보기 <ChevronRight size={14} />
-            </button>
-          </div>
-
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => <div key={i} className="h-16 bg-white/50 animate-pulse rounded-xl" />)}
-            </div>
-          ) : recentCerts.length > 0 ? (
-            <div className="space-y-2">
-              {recentCerts.map((log) => {
-                const displayName = (log.profiles as any)?.display_name || (log.profiles as any)?.username || '멤버';
-                const tier = (log.profiles as any)?.tier;
-                return (
-                  <div
-                    key={log.id}
-                    onClick={() => router.push("/community?tab=cert")}
-                    className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.98] transition-transform"
-                  >
-                    <div className="w-12 h-12 rounded-lg bg-slate-100 overflow-hidden shrink-0">
-                      <img
-                        src={log.proof_image_url}
-                        alt="인증"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-xs font-bold text-slate-800 truncate">{displayName}</span>
-                        {tier && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded-full font-bold shrink-0">
-                            {tier}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md">
-                          {log.workout_type === 'running'  ? '🏃 러닝'
-                          : log.workout_type === 'gym'     ? '💪 운동완료'
-                          : log.workout_type === 'walking' ? '🚶 걷기/산책'
-                          : log.workout_type === 'yoga'    ? '🧘 요가/필라테스'
-                          :                                  '⚽ 기타스포츠'}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{log.workout_date}</span>
-                      </div>
-                      {log.comment && (
-                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{log.comment}</p>
-                      )}
-                    </div>
-                    <ChevronRight size={14} className="text-slate-300 shrink-0" />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </section>
 
         {/* Rulebook Quick Link */}
         <button
@@ -869,132 +870,132 @@ export default function DashboardPage() {
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMemberDetail(null)} />
           <div className="absolute inset-x-0 bottom-0 flex justify-center pointer-events-none">
-          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 shadow-2xl pointer-events-auto">
-            {/* Header */}
-            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-3xl">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-lg text-primary">{memberDetail.name}</span>
-                <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold">{memberDetail.tier}</span>
+            <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom duration-300 shadow-2xl pointer-events-auto">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between rounded-t-3xl">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-lg text-primary">{memberDetail.name}</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-bold">{memberDetail.tier}</span>
+                </div>
+                <button onClick={() => setMemberDetail(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                  <X size={20} className="text-slate-500" />
+                </button>
               </div>
-              <button onClick={() => setMemberDetail(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                <X size={20} className="text-slate-500" />
-              </button>
-            </div>
 
-            {/* Stats */}
-            <div className="px-6 pt-4 pb-2 flex gap-3">
-              <div className="flex-1 bg-slate-50 rounded-2xl p-3 text-center">
-                <p className="text-xl font-black text-primary">{memberDetail.logCount}회</p>
-                <p className="text-[10px] text-slate-400 font-bold mt-0.5">인증 횟수</p>
-              </div>
-              <div className="flex-1 bg-amber-50 rounded-2xl p-3 text-center">
-                <p className="text-xl font-black text-accent">
-                  {votingActive ? memberDetail.workoutPoints : memberDetail.totalScore}점
-                </p>
-                <p className="text-[10px] text-slate-400 font-bold mt-0.5">
-                  {votingActive ? '인증 점수' : '종합 점수'}
-                </p>
-              </div>
-            </div>
-
-            {/* Calendar */}
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-bold text-primary text-sm">
-                  {format(modalMonth, "yyyy년 M월", { locale: ko })}
-                </span>
-                <div className="flex gap-1">
-                  <button onClick={() => setModalMonth(subMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
-                    <ChevronLeft size={18} className="text-slate-500" />
-                  </button>
-                  <button onClick={() => setModalMonth(addMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
-                    <ChevronRight size={18} className="text-slate-500" />
-                  </button>
+              {/* Stats */}
+              <div className="px-6 pt-4 pb-2 flex gap-3">
+                <div className="flex-1 bg-slate-50 rounded-2xl p-3 text-center">
+                  <p className="text-xl font-black text-primary">{memberDetail.logCount}회</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">인증 횟수</p>
+                </div>
+                <div className="flex-1 bg-amber-50 rounded-2xl p-3 text-center">
+                  <p className="text-xl font-black text-accent">
+                    {votingActive ? memberDetail.workoutPoints : memberDetail.totalScore}점
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                    {votingActive ? '인증 점수' : '종합 점수'}
+                  </p>
                 </div>
               </div>
-              {(() => {
-                const memberLogsForCalendar = allLogs.filter(
-                  l => l.user_id === memberDetail.userId && l.status === 'approved'
-                );
-                const calDays = eachDayOfInterval({
-                  start: startOfWeek(startOfMonth(modalMonth)),
-                  end: endOfWeek(endOfMonth(modalMonth)),
-                });
-                return (
-                  <>
-                    <div className="grid grid-cols-7 mb-1">
-                      {["일","월","화","수","목","금","토"].map(d => (
-                        <div key={d} className="text-center text-[10px] font-bold text-slate-400 py-1">{d}</div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 gap-[1px] bg-slate-100 rounded-xl overflow-hidden">
-                      {calDays.map((day, i) => {
-                        const dayLogs = memberLogsForCalendar.filter(l => isSameDay(new Date(l.workout_date), day));
-                        const inThisMonth = isSameMonth(day, modalMonth);
-                        const hasWorkout = dayLogs.length > 0 && inThisMonth;
-                        return (
-                          <div key={i} className={cn(
-                            "aspect-square flex flex-col items-center justify-center",
-                            hasWorkout ? "bg-amber-50" : "bg-white"
-                          )}>
-                            <span className={cn(
-                              "w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium",
-                              hasWorkout ? "bg-accent text-white font-bold text-[10px]" :
-                                !inThisMonth ? "text-slate-300" : "text-slate-700"
-                            )}>
-                              {format(day, "d")}
-                            </span>
-                            {hasWorkout && (
-                              <span className="text-[8px] font-black text-accent leading-none mt-0.5">
-                                {dayLogs.length > 1 ? `${dayLogs.length}회` : "✓"}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
 
-            {/* MVP PR (성과 자랑) */}
-            <div className="px-6 pb-8">
-              <h4 className="font-bold text-sm text-primary mb-3 flex items-center gap-2">
-                <Star size={14} className="text-accent" />
-                이번 시즌 성과 자랑
-              </h4>
-              {isLoadingModal ? (
-                <div className="h-20 bg-slate-50 animate-pulse rounded-xl" />
-              ) : memberPr ? (
-                <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-100">
-                  {(() => {
-                    const getPrUrls = (imageUrl?: string): string[] => {
-                      if (!imageUrl) return [];
-                      try { const p = JSON.parse(imageUrl); if (Array.isArray(p)) return p; } catch {}
-                      return [imageUrl];
-                    };
-                    const isVid = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
-                    const urls = getPrUrls(memberPr.image_url);
-                    return urls.length > 0 ? (
-                      <div className={cn("grid gap-2 mb-3", urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
-                        {urls.map((url, i) =>
-                          isVid(url) ? (
-                            <video key={i} src={url} controls className="w-full rounded-xl bg-black" />
-                          ) : (
-                            <img key={i} src={url} alt="" className="w-full rounded-xl object-contain bg-slate-100" />
-                          )
-                        )}
+              {/* Calendar */}
+              <div className="px-6 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-bold text-primary text-sm">
+                    {format(modalMonth, "yyyy년 M월", { locale: ko })}
+                  </span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setModalMonth(subMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                      <ChevronLeft size={18} className="text-slate-500" />
+                    </button>
+                    <button onClick={() => setModalMonth(addMonths(modalMonth, 1))} className="p-1 hover:bg-slate-100 rounded-full transition-colors">
+                      <ChevronRight size={18} className="text-slate-500" />
+                    </button>
+                  </div>
+                </div>
+                {(() => {
+                  const memberLogsForCalendar = allLogs.filter(
+                    l => l.user_id === memberDetail.userId && l.status === 'approved'
+                  );
+                  const calDays = eachDayOfInterval({
+                    start: startOfWeek(startOfMonth(modalMonth)),
+                    end: endOfWeek(endOfMonth(modalMonth)),
+                  });
+                  return (
+                    <>
+                      <div className="grid grid-cols-7 mb-1">
+                        {["일", "월", "화", "수", "목", "금", "토"].map(d => (
+                          <div key={d} className="text-center text-[10px] font-bold text-slate-400 py-1">{d}</div>
+                        ))}
                       </div>
-                    ) : null;
-                  })()}
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{memberPr.content}</p>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 text-center py-6 bg-slate-50 rounded-xl">아직 성과 자랑을 작성하지 않았어요.</p>
-              )}
+                      <div className="grid grid-cols-7 gap-[1px] bg-slate-100 rounded-xl overflow-hidden">
+                        {calDays.map((day, i) => {
+                          const dayLogs = memberLogsForCalendar.filter(l => isSameDay(new Date(l.workout_date), day));
+                          const inThisMonth = isSameMonth(day, modalMonth);
+                          const hasWorkout = dayLogs.length > 0 && inThisMonth;
+                          return (
+                            <div key={i} className={cn(
+                              "aspect-square flex flex-col items-center justify-center",
+                              hasWorkout ? "bg-amber-50" : "bg-white"
+                            )}>
+                              <span className={cn(
+                                "w-6 h-6 flex items-center justify-center rounded-full text-[11px] font-medium",
+                                hasWorkout ? "bg-accent text-white font-bold text-[10px]" :
+                                  !inThisMonth ? "text-slate-300" : "text-slate-700"
+                              )}>
+                                {format(day, "d")}
+                              </span>
+                              {hasWorkout && (
+                                <span className="text-[8px] font-black text-accent leading-none mt-0.5">
+                                  {dayLogs.length > 1 ? `${dayLogs.length}회` : "✓"}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* MVP PR (성과 자랑) */}
+              <div className="px-6 pb-8">
+                <h4 className="font-bold text-sm text-primary mb-3 flex items-center gap-2">
+                  <Star size={14} className="text-accent" />
+                  이번 시즌 성과 자랑
+                </h4>
+                {isLoadingModal ? (
+                  <div className="h-20 bg-slate-50 animate-pulse rounded-xl" />
+                ) : memberPr ? (
+                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-4 border border-amber-100">
+                    {(() => {
+                      const getPrUrls = (imageUrl?: string): string[] => {
+                        if (!imageUrl) return [];
+                        try { const p = JSON.parse(imageUrl); if (Array.isArray(p)) return p; } catch { }
+                        return [imageUrl];
+                      };
+                      const isVid = (url: string) => /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+                      const urls = getPrUrls(memberPr.image_url);
+                      return urls.length > 0 ? (
+                        <div className={cn("grid gap-2 mb-3", urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+                          {urls.map((url, i) =>
+                            isVid(url) ? (
+                              <video key={i} src={url} controls className="w-full rounded-xl bg-black" />
+                            ) : (
+                              <img key={i} src={url} alt="" className="w-full rounded-xl object-contain bg-slate-100" />
+                            )
+                          )}
+                        </div>
+                      ) : null;
+                    })()}
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{memberPr.content}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 text-center py-6 bg-slate-50 rounded-xl">아직 성과 자랑을 작성하지 않았어요.</p>
+                )}
+              </div>
             </div>
-          </div>
           </div>
         </div>
       )}
