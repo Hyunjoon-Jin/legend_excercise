@@ -7,12 +7,6 @@ export function usePushNotifications() {
     const [isSubscribed, setIsSubscribed] = useState(false);
     const [permission, setPermission] = useState<NotificationPermission>('default');
 
-    useEffect(() => {
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-            setPermission(Notification.permission);
-        }
-    }, []);
-
     const urlBase64ToUint8Array = (base64String: string) => {
         const padding = '='.repeat((4 - base64String.length % 4) % 4);
         const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
@@ -24,6 +18,28 @@ export function usePushNotifications() {
         return outputArray;
     };
 
+    // 앱 로드 시: SW 자동 등록 + 기존 구독 여부 확인
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        if ('Notification' in window) {
+            setPermission(Notification.permission);
+        }
+
+        if (!user || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => registration.pushManager.getSubscription())
+            .then(async subscription => {
+                if (subscription) {
+                    setIsSubscribed(true);
+                    // 브라우저에 구독이 있으면 DB에도 저장 (테이블 신규 생성 등으로 누락된 경우 복구)
+                    await savePushSubscription(user.id, subscription.toJSON());
+                }
+            })
+            .catch(err => console.error('SW registration check failed:', err));
+    }, [user]);
+
     const subscribeToPush = async () => {
         if (!user) return;
 
@@ -34,7 +50,7 @@ export function usePushNotifications() {
             }
 
             const registration = await navigator.serviceWorker.register('/sw.js');
-            console.log('Service Worker registered');
+            await navigator.serviceWorker.ready;
 
             const permissionResult = await Notification.requestPermission();
             setPermission(permissionResult);
@@ -46,6 +62,10 @@ export function usePushNotifications() {
 
             const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
             if (!publicKey) throw new Error('VAPID public key missing');
+
+            // 기존 구독 해제 후 재구독 (키 변경 대응)
+            const existingSub = await registration.pushManager.getSubscription();
+            if (existingSub) await existingSub.unsubscribe();
 
             const subscription = await registration.pushManager.subscribe({
                 userVisibleOnly: true,

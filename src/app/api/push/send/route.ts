@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
 
+// Service role key bypasses RLS → 서버사이드에서 구독 테이블 읽기/쓰기 가능
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    // We use anon key but we changed RLS so anyone can read subscriptions.
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 // Initialization moved inside POST handler to prevent build-time errors

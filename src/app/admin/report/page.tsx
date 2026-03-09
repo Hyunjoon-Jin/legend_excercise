@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
-import { ko } from "date-fns/locale";
+import { Suspense, useEffect, useState, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { format, startOfWeek, endOfWeek, parseISO } from "date-fns";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { getActiveSeason, getDailyReportData, getRankings, getWeeklyStats } from "@/lib/data";
 import { Button } from "@/components/ui/button";
@@ -13,13 +12,22 @@ import { RankingCard } from "@/components/features/report/ranking-card";
 import { WeeklyStatsCard } from "@/components/features/report/weekly-stats-card";
 import { ReportShareButton } from "@/components/features/report/report-share-button";
 
-export default function AdminReportPage() {
+function AdminReportContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { user, isAuthenticated } = useAuthStore();
     const [isLoading, setIsLoading] = useState(true);
 
-    // Default to yesterday's date for daily report (since today might not be over yet)
-    const [selectedDate, setSelectedDate] = useState<Date>(subDays(new Date(), 0)); // Or new Date() based on preference
+    // URL ?date=YYYY-MM-DD 파라미터 있으면 그 날짜로, 없으면 오늘
+    const initialDate = (() => {
+        const param = searchParams.get("date");
+        if (param) {
+            const parsed = parseISO(param);
+            if (!isNaN(parsed.getTime())) return parsed;
+        }
+        return new Date();
+    })();
+    const [selectedDate, setSelectedDate] = useState<Date>(initialDate);
 
     // Data states
     const [dailyLogs, setDailyLogs] = useState<any[]>([]);
@@ -48,7 +56,6 @@ export default function AdminReportPage() {
             if (season) {
                 const dateStr = format(selectedDate, "yyyy-MM-dd");
                 const weekStartStr = format(weekStart, "yyyy-MM-dd");
-                const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
                 // Fetch all required data in parallel
                 const [dailyRes, rankingRes, weeklyRes] = await Promise.all([
@@ -125,7 +132,6 @@ export default function AdminReportPage() {
 
                 {/* Report Previews */}
                 <div className="space-y-8 overflow-hidden">
-                    {/* Wrap ref targets in full-width wrappers, but use scale trick to fit mobile view while keeping rendering resolution high */}
                     <div className="w-full overflow-x-auto pb-4">
                         <div className="scale-[0.4] origin-top-left" style={{ width: '800px', height: 'auto', marginBottom: '-55%' }}>
                             <DailyCertificationCard ref={dailyRef} date={selectedDate} logs={dailyLogs} />
@@ -147,5 +153,13 @@ export default function AdminReportPage() {
 
             </main>
         </div>
+    );
+}
+
+export default function AdminReportPage() {
+    return (
+        <Suspense fallback={<div className="p-8 text-center text-slate-500">로딩 중...</div>}>
+            <AdminReportContent />
+        </Suspense>
     );
 }
