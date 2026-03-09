@@ -678,7 +678,7 @@ export default function AdminPage() {
                     <h1 className="text-lg font-bold text-primary">관리자 메뉴</h1>
                 </div>
                 <div className="px-3 pb-3">
-                    <div className="grid grid-cols-3 gap-0.5 bg-slate-100 p-1 rounded-xl">
+                    <div className="grid grid-cols-5 gap-0.5 bg-slate-100 p-1 rounded-xl">
                         <button
                             onClick={() => setActiveTab('by-date')}
                             className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'by-date' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
@@ -738,6 +738,12 @@ export default function AdminPage() {
                             className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", activeTab === 'notice' ? "bg-white text-primary shadow-sm" : "text-slate-500")}
                         >
                             공지
+                        </button>
+                        <button
+                            onClick={() => router.push('/admin/report')}
+                            className={cn("py-2 text-[11px] font-bold rounded-lg transition-all text-center", "text-slate-500 hover:text-primary")}
+                        >
+                            리포트
                         </button>
                     </div>
                 </div>
