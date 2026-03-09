@@ -14,7 +14,8 @@ export interface User {
 interface AuthState {
     user: User | null;
     isAuthenticated: boolean;
-    login: (user: User) => void;
+    autoLogin: boolean;
+    login: (user: User, autoLogin?: boolean) => void;
     logout: () => void;
 }
 
@@ -23,8 +24,9 @@ export const useAuthStore = create<AuthState>()(
         (set) => ({
             user: null,
             isAuthenticated: false,
-            login: (user) => set({ user, isAuthenticated: true }),
-            logout: () => set({ user: null, isAuthenticated: false }),
+            autoLogin: false,
+            login: (user, autoLogin = false) => set({ user, isAuthenticated: true, autoLogin }),
+            logout: () => set({ user: null, isAuthenticated: false, autoLogin: false }),
         }),
         {
             name: 'auth-storage', // name of the item in the storage (must be unique)

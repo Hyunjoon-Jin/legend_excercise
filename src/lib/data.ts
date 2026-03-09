@@ -238,6 +238,43 @@ export const resubmitWorkoutLog = async (logId: string) => {
     return { data, error };
 };
 
+// --- Report Data (Admin) ---
+export const getDailyReportData = async (seasonId: string, dateStr: string) => {
+    // dateStr should be YYYY-MM-DD
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .select(`
+            id, workout_type, proof_image_url, comment,
+            profiles (id, username, display_name, avatar_url, tier)
+        `)
+        .eq('season_id', seasonId)
+        .eq('workout_date', dateStr)
+        .eq('status', 'approved');
+
+    return { data: data as any[], error };
+};
+
+export const getWeeklyStats = async (seasonId: string, startDateStr: string, endDateStr: string) => {
+    // Fetch all approved logs between start and end date for the season
+    const { data, error } = await supabase
+        .from('workout_logs')
+        .select('workout_date')
+        .eq('season_id', seasonId)
+        .eq('status', 'approved')
+        .gte('workout_date', startDateStr)
+        .lte('workout_date', endDateStr);
+
+    if (error) return { data: null, error };
+
+    // Group by date
+    const stats = (data || []).reduce((acc: Record<string, number>, log) => {
+        acc[log.workout_date] = (acc[log.workout_date] || 0) + 1;
+        return acc;
+    }, {});
+
+    return { data: stats, error: null };
+};
+
 // --- Rankings ---
 export const getRankings = async (seasonId: string) => {
     // 1. Fetch Season, Logs, and Votes in parallel

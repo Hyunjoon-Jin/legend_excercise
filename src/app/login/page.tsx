@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,9 +21,17 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
     const router = useRouter();
-    const { login } = useAuthStore();
+    const { login, isAuthenticated } = useAuthStore();
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [autoLoginChecked, setAutoLoginChecked] = useState(false);
+
+    // 이미 로그인된 상태면 홈으로 이동 (자동로그인 적용 시)
+    useEffect(() => {
+        if (isAuthenticated) {
+            router.replace("/");
+        }
+    }, [isAuthenticated, router]);
 
     const form = useForm<LoginFormValues>({
         resolver: zodResolver(loginSchema),
@@ -56,7 +64,10 @@ export default function LoginPage() {
                         username: "진현준",
                         role: "admin",
                         tier: "Gold"
-                    });
+                    }, autoLoginChecked);
+                    if (!autoLoginChecked) {
+                        sessionStorage.setItem('legend-session-active', 'true');
+                    }
                     router.push("/");
                     return;
                 }
@@ -72,7 +83,10 @@ export default function LoginPage() {
                     role: profile.role,
                     tier: profile.tier,
                     avatarUrl: profile.avatar_url,
-                });
+                }, autoLoginChecked);
+                if (!autoLoginChecked) {
+                    sessionStorage.setItem('legend-session-active', 'true');
+                }
                 router.push("/");
             } else {
                 setError("시크릿 코드가 일치하지 않습니다.");
@@ -128,6 +142,28 @@ export default function LoginPage() {
                                 <p className="text-xs text-error text-center">{error}</p>
                             </div>
                         )}
+                        <label
+                            htmlFor="auto-login"
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 14px',
+                                backgroundColor: '#fffbeb',
+                                border: '1.5px solid #d97706',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <span style={{ fontSize: '14px', fontWeight: '600', color: '#1e293b' }}>자동 로그인</span>
+                            <input
+                                id="auto-login"
+                                type="checkbox"
+                                checked={autoLoginChecked}
+                                onChange={(e) => setAutoLoginChecked(e.target.checked)}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#d97706' }}
+                            />
+                        </label>
                         <Button type="submit" className="w-full mt-6" size="lg" disabled={isLoading}>
                             {isLoading ? "로그인 중..." : "로그인"}
                         </Button>
