@@ -794,7 +794,7 @@ export const toggleReaction = async (
     emoji: string,
     authorId?: string
 ) => {
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
         .from('reactions')
         .select('id')
         .eq('target_type', targetType)
@@ -802,11 +802,14 @@ export const toggleReaction = async (
         .eq('user_id', userId)
         .eq('emoji', emoji)
         .maybeSingle();
+    if (selectError) console.error('[toggleReaction] select error:', selectError);
     if (existing) {
-        await supabase.from('reactions').delete().eq('id', existing.id);
+        const { error: deleteError } = await supabase.from('reactions').delete().eq('id', existing.id);
+        if (deleteError) console.error('[toggleReaction] delete error:', deleteError);
         return { added: false };
     }
     const { data: newReaction, error } = await supabase.from('reactions').insert([{ target_type: targetType, target_id: targetId, user_id: userId, emoji }]).select().single();
+    if (error) console.error('[toggleReaction] insert error:', error);
 
     // Notify if workout_log
     if (newReaction && !error && targetType === 'workout_log' && authorId && userId !== authorId) {
