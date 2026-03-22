@@ -196,7 +196,7 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
             )
             .subscribe();
 
-        // Realtime: new reactions from others
+        // Realtime: new reactions from others (INSERT + DELETE)
         const rxnChannel = supabase
             .channel("chat_reactions_realtime")
             .on(
@@ -212,6 +212,24 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                         const next = found
                             ? current.map((g) => g.emoji === emoji ? { ...g, count: g.count + 1 } : g)
                             : [...current, { emoji, count: 1, hasMe: false }];
+                        return { ...prev, [target_id]: next };
+                    });
+                }
+            )
+            .on(
+                "postgres_changes",
+                { event: "DELETE", schema: "public", table: "reactions" },
+                (payload) => {
+                    const { target_type, target_id, user_id: reactorId, emoji } = payload.old as any;
+                    if (target_type !== "chat") return;
+                    if (reactorId === userId) return; // already handled optimistically
+                    setReactionsMap((prev) => {
+                        const current = prev[target_id] || [];
+                        const found = current.find((g) => g.emoji === emoji);
+                        if (!found) return prev;
+                        const next = found.count <= 1
+                            ? current.filter((g) => g.emoji !== emoji)
+                            : current.map((g) => g.emoji === emoji ? { ...g, count: g.count - 1 } : g);
                         return { ...prev, [target_id]: next };
                     });
                 }
@@ -234,7 +252,14 @@ function ChatTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
         if (!text || sending) return;
         setSending(true);
         setInput("");
-        await sendChatMessage(userId, text);
+        const { data } = await sendChatMessage(userId, text);
+        if (data) {
+            // 보낸 메시지를 즉시 로컬 state에 반영 (realtime 이벤트 대기 불필요)
+            setMessages((prev) => {
+                if (prev.some((m) => m.id === data.id)) return prev;
+                return [...prev, data as ChatMessage];
+            });
+        }
         setSending(false);
     };
 
@@ -644,20 +669,16 @@ function NoticeTab() {
 
 // ─── Cert Feed Tab ────────────────────────────────────────────────────────────
 
-function CertFeedItem({ log, userId, isAdmin }: { log: WorkoutLog; userId: string; isAdmin: boolean }) {
+function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: {
+    log: WorkoutLog; userId: string; isAdmin: boolean;
+    reactionsMap: Record<string, ReactionGroup[]>;
+    onReactionToggle: (logId: string, emoji: string, authorId: string) => void;
+}) {
     const [showComments, setShowComments] = useState(false);
     const [comments, setComments] = useState<WorkoutLogComment[]>([]);
-    const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({});
     const [commentInput, setCommentInput] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [loadingComments, setLoadingComments] = useState(false);
-
-    useEffect(() => {
-        // Load initial reactions for this log
-        getReactionsForTargets('workout_log', [log.id]).then(({ data }) => {
-            if (data) setReactionsMap(buildReactionsMap(data, userId));
-        });
-    }, [log.id, userId]);
 
     const handleToggleComments = async () => {
         if (!showComments && comments.length === 0) {
@@ -691,8 +712,7 @@ function CertFeedItem({ log, userId, isAdmin }: { log: WorkoutLog; userId: strin
     };
 
     const handleLogReaction = (emoji: string) => {
-        setReactionsMap(prev => optimisticToggle(prev, log.id, emoji));
-        toggleReaction("workout_log", log.id, userId, emoji, log.user_id);
+        onReactionToggle(log.id, emoji, log.user_id);
     };
 
     const displayName = getDisplayName(log.profiles);
@@ -869,13 +889,78 @@ function CertFeedTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
     const [logs, setLogs] = useState<WorkoutLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [onlyMine, setOnlyMine] = useState(false);
+    const [reactionsMap, setReactionsMap] = useState<Record<string, ReactionGroup[]>>({});
 
     useEffect(() => {
         getCertificationFeed(40).then(({ data }) => {
-            if (data) setLogs(data);
+            if (data) {
+                setLogs(data);
+                const logIds = data.map((l) => l.id);
+                if (logIds.length > 0) {
+                    getReactionsForTargets('workout_log', logIds).then(({ data: raw }) => {
+                        if (raw) setReactionsMap(buildReactionsMap(raw, userId));
+                    });
+                }
+            }
             setLoading(false);
         });
-    }, []);
+    }, [userId]);
+
+    // Realtime: 다른 사용자의 반응(감정표현) 즉시 반영
+    useEffect(() => {
+        const rxnChannel = supabase
+            .channel("cert_reactions_realtime")
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "reactions" }, (payload) => {
+                const { target_type, target_id, user_id: reactorId, emoji } = payload.new as any;
+                if (target_type !== "workout_log") return;
+                if (reactorId === userId) return; // 본인은 optimistic update로 이미 처리
+                setReactionsMap((prev) => {
+                    const current = prev[target_id] || [];
+                    const found = current.find((g) => g.emoji === emoji);
+                    const next = found
+                        ? current.map((g) => g.emoji === emoji ? { ...g, count: g.count + 1 } : g)
+                        : [...current, { emoji, count: 1, hasMe: false }];
+                    return { ...prev, [target_id]: next };
+                });
+            })
+            .on("postgres_changes", { event: "DELETE", schema: "public", table: "reactions" }, (payload) => {
+                const { target_type, target_id, user_id: reactorId, emoji } = payload.old as any;
+                if (target_type !== "workout_log") return;
+                if (reactorId === userId) return; // 본인은 optimistic update로 이미 처리
+                setReactionsMap((prev) => {
+                    const current = prev[target_id] || [];
+                    const found = current.find((g) => g.emoji === emoji);
+                    if (!found) return prev;
+                    const next = found.count <= 1
+                        ? current.filter((g) => g.emoji !== emoji)
+                        : current.map((g) => g.emoji === emoji ? { ...g, count: g.count - 1 } : g);
+                    return { ...prev, [target_id]: next };
+                });
+            })
+            .subscribe();
+
+        // Realtime: 관리자가 인증 승인하면 피드에 즉시 추가
+        const logsChannel = supabase
+            .channel("cert_feed_logs_realtime")
+            .on("postgres_changes", { event: "UPDATE", schema: "public", table: "workout_logs" }, (payload) => {
+                if (payload.new.status === "approved") {
+                    getCertificationFeed(40).then(({ data }) => {
+                        if (data) setLogs(data);
+                    });
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(rxnChannel);
+            supabase.removeChannel(logsChannel);
+        };
+    }, [userId]);
+
+    const handleReactionToggle = (logId: string, emoji: string, authorId: string) => {
+        setReactionsMap((prev) => optimisticToggle(prev, logId, emoji));
+        toggleReaction("workout_log", logId, userId, emoji, authorId);
+    };
 
     const displayed = onlyMine ? logs.filter(l => l.user_id === userId) : logs;
 
@@ -917,7 +1002,14 @@ function CertFeedTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
                 ) : (
                     <div className="divide-y divide-slate-50">
                         {displayed.map((log) => (
-                            <CertFeedItem key={log.id} log={log} userId={userId} isAdmin={isAdmin} />
+                            <CertFeedItem
+                                key={log.id}
+                                log={log}
+                                userId={userId}
+                                isAdmin={isAdmin}
+                                reactionsMap={reactionsMap}
+                                onReactionToggle={handleReactionToggle}
+                            />
                         ))}
                     </div>
                 )}
@@ -951,6 +1043,23 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
 
     useEffect(() => {
         loadPosts();
+    }, []);
+
+    // Realtime: 새 게시글/삭제 즉시 반영
+    useEffect(() => {
+        const postsChannel = supabase
+            .channel("board_posts_realtime")
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, () => {
+                loadPosts();
+            })
+            .on("postgres_changes", { event: "DELETE", schema: "public", table: "posts" }, () => {
+                loadPosts();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(postsChannel);
+        };
     }, []);
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

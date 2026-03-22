@@ -46,9 +46,12 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            // 실제 프로젝트에서는 Supabase Auth를 쓰는 것이 좋으나, 
+            // 실제 프로젝트에서는 Supabase Auth를 쓰는 것이 좋으나,
             // 사용자의 요구사항(이름+비번 간단 로그인)에 맞춰 profiles 테이블에서 직접 조회합니다.
             // 보안을 위해 실제 서비스에서는 password를 hash하여 저장하고 비교해야 합니다.
+
+            // 관리자 권한을 부여할 사용자 목록
+            const ADMIN_USERNAMES = ["진현준", "손민지"];
 
             const { data: profile, error: fetchError } = await supabase
                 .from('profiles')
@@ -77,10 +80,12 @@ export default function LoginPage() {
 
             // DB에 저장된 비밀번호 또는 기본 비밀번호(1234) 비교
             if (data.password === profile.password || data.password === "1234") {
+                // ADMIN_USERNAMES 목록에 있는 사용자는 항상 admin 역할 부여
+                const resolvedRole = ADMIN_USERNAMES.includes(profile.username) ? "admin" : profile.role;
                 login({
                     id: profile.id,
                     username: profile.username,
-                    role: profile.role,
+                    role: resolvedRole,
                     tier: profile.tier,
                     avatarUrl: profile.avatar_url,
                 }, autoLoginChecked);

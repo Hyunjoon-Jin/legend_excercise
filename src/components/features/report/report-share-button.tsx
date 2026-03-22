@@ -23,6 +23,15 @@ export function ReportShareButton({ dailyRef, rankingRef, weeklyRef, date, disab
             const files: File[] = [];
             const dateStr = format(date, "yyyyMMdd");
 
+            // html-to-image는 첫 번째 호출 시 웹폰트/이미지를 캐싱하지 못해
+            // 일부 캡처가 실패하는 문제가 있습니다. warm-up 호출로 사전 로딩합니다.
+            const allRefs = [dailyRef, rankingRef, weeklyRef];
+            for (const ref of allRefs) {
+                if (ref.current) {
+                    await toBlob(ref.current, { cacheBust: true });
+                }
+            }
+
             if (dailyRef.current) {
                 const blob = await toBlob(dailyRef.current, { cacheBust: true, pixelRatio: 2 });
                 if (blob) files.push(new File([blob], `daily_${dateStr}.png`, { type: "image/png" }));

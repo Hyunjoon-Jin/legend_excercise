@@ -603,17 +603,25 @@ export default function DashboardPage() {
           ) : null}
         </section>
 
-        {/* My Cert History */}
+        {/* My Cert History (최근 3건 요약) */}
         {myLogs.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-slate-700">내 인증 내역</span>
-              <Badge className="bg-slate-100 text-slate-600 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
-                {myLogs.length}건
-              </Badge>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-700">내 인증 내역</span>
+                <Badge className="bg-slate-100 text-slate-600 border-none font-bold text-[10px] px-1.5 py-0.5 h-auto">
+                  총 {myLogs.length}건
+                </Badge>
+              </div>
+              <button
+                onClick={() => router.push("/calendar")}
+                className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+              >
+                전체보기 <ChevronRight size={14} />
+              </button>
             </div>
             <div className="space-y-1.5">
-              {myLogs.slice(0, 10).map(log => (
+              {myLogs.slice(0, 3).map(log => (
                 <div key={log.id} className="bg-white rounded-xl px-3 py-2.5 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
