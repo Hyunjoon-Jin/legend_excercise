@@ -4,6 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
     Plus, ChevronUp, ChevronDown, Trash2, Loader2, BarChart2,
@@ -103,24 +110,27 @@ function JumpToSelector({
     label?: string;
 }) {
     return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
             <span className="text-[11px] text-slate-500 whitespace-nowrap shrink-0">{label}:</span>
-            <select
-                value={value}
-                onChange={e => onChange(e.target.value)}
-                className="flex-1 text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
-            >
-                <option value="">다음 문항 순서대로</option>
-                <option value="-1">— 설문 종료 —</option>
-                {questions.map((q, idx) => {
-                    if (idx === currentIndex) return null;
-                    return (
-                        <option key={q.id} value={String(idx)}>
-                            문항 {idx + 1}: {q.title || '(제목 없음)'}
-                        </option>
-                    );
-                })}
-            </select>
+            <div className="flex-1 min-w-0">
+                <Select value={value || '__default__'} onValueChange={v => onChange(v === '__default__' ? '' : v)}>
+                    <SelectTrigger className="h-8 text-xs w-full">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="__default__">다음 문항 순서대로</SelectItem>
+                        <SelectItem value="-1">— 설문 종료 —</SelectItem>
+                        {questions.map((q, idx) => {
+                            if (idx === currentIndex) return null;
+                            return (
+                                <SelectItem key={q.id} value={String(idx)}>
+                                    문항 {idx + 1}: {q.title || '(제목 없음)'}
+                                </SelectItem>
+                            );
+                        })}
+                    </SelectContent>
+                </Select>
+            </div>
         </div>
     );
 }
@@ -244,7 +254,7 @@ function SurveyCreateModal({
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-            <DialogContent className="max-w-[520px] mx-auto max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[calc(100vw-2rem)] max-w-[520px] mx-auto max-h-[90vh] overflow-x-hidden overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>
                         {step === 'info' ? '새 설문 만들기' : '문항 구성'}
@@ -341,10 +351,10 @@ function SurveyCreateModal({
                                         {/* Type selector */}
                                         <div>
                                             <label className="text-xs font-semibold text-slate-500 mb-1 block">문항 유형</label>
-                                            <select
+                                            <Select
                                                 value={q.type}
-                                                onChange={e => {
-                                                    const newType = e.target.value as QuestionType;
+                                                onValueChange={val => {
+                                                    const newType = val as QuestionType;
                                                     updateQ(q.id, {
                                                         type: newType,
                                                         options: ['single_choice', 'multiple_choice'].includes(newType)
@@ -352,12 +362,16 @@ function SurveyCreateModal({
                                                             : q.options,
                                                     });
                                                 }}
-                                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
                                             >
-                                                {(Object.entries(Q_TYPE_LABELS) as [QuestionType, string][]).map(([val, label]) => (
-                                                    <option key={val} value={val}>{label}</option>
-                                                ))}
-                                            </select>
+                                                <SelectTrigger className="w-full text-sm">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(Object.entries(Q_TYPE_LABELS) as [QuestionType, string][]).map(([val, label]) => (
+                                                        <SelectItem key={val} value={val}>{label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </div>
 
                                         {/* Title */}

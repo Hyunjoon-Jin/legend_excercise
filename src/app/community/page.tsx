@@ -416,7 +416,11 @@ function PostDetail({
         const text = commentInput.trim();
         if (!text || submitting) return;
         setSubmitting(true);
-        const { data } = await createComment(post.id, userId, text);
+        const { data, error } = await createComment(post.id, userId, text);
+        if (error) {
+            console.error("createComment error:", error);
+            alert(`댓글 저장 실패: ${error.message}`);
+        }
         if (data) setComments((prev) => [...prev, data]);
         setCommentInput("");
         setSubmitting(false);
@@ -669,7 +673,11 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
         const text = commentInput.trim();
         if (!text || submitting) return;
         setSubmitting(true);
-        const { data } = await createWorkoutLogComment(log.id, userId, text, log.user_id);
+        const { data, error } = await createWorkoutLogComment(log.id, userId, text, log.user_id);
+        if (error) {
+            console.error("createWorkoutLogComment error:", error);
+            alert(`댓글 저장 실패: ${error.message}`);
+        }
         if (data) {
             setComments(prev => [...prev, data]);
             setCommentCount(prev => prev + 1);
@@ -1060,12 +1068,17 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
             setUploading(false);
         }
 
-        const { data } = await createPost(userId, title.trim(), content.trim(), uploadedUrls);
+        const { data, error } = await createPost(userId, title.trim(), content.trim(), uploadedUrls);
+        if (error) {
+            console.error("createPost error:", error);
+            alert(`게시글 저장 실패\n\n${error.message}\n\n관리자에게 문의하거나 Supabase RLS 설정을 확인하세요.`);
+            setSubmitting(false);
+            return;
+        }
         if (data) {
             setShowWrite(false);
             resetForm();
             await loadPosts();
-            // 다른 사용자들에게 새 게시글 브로드캐스트
             boardChannelRef.current?.send({ type: "broadcast", event: "posts_updated", payload: {} });
         }
         setSubmitting(false);
