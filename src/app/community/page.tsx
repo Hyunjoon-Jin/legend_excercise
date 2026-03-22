@@ -652,8 +652,7 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
 }) {
     const [showComments, setShowComments] = useState(false);
     const [comments, setComments] = useState<WorkoutLogComment[]>([]);
-    // DB에서 받아온 댓글 수로 초기화 — 다른 탭 갔다 와도 수가 유지됨
-    const [commentCount, setCommentCount] = useState(log.comment_count ?? 0);
+    const [commentCount, setCommentCount] = useState(0);
     const [commentInput, setCommentInput] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [loadingComments, setLoadingComments] = useState(false);
