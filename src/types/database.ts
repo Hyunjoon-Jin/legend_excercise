@@ -42,6 +42,7 @@ export interface WorkoutLog {
     created_at: string;
     // Join data
     profiles?: Profile;
+    comment_count?: number;
 }
 
 export interface Vote {

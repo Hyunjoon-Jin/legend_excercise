@@ -158,11 +158,15 @@ export const updateLogStatus = async (logId: string, status: 'approved' | 'rejec
 export const getCertificationFeed = async (limit: number = 30) => {
     const { data, error } = await supabase
         .from('workout_logs')
-        .select('*, profiles(id, username, display_name, avatar_url, tier)')
+        .select('*, profiles(id, username, display_name, avatar_url, tier), workout_log_comments(count)')
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(limit);
-    return { data: data as WorkoutLog[], error };
+    const logs = (data || []).map((l: any) => ({
+        ...l,
+        comment_count: l.workout_log_comments?.[0]?.count ?? 0,
+    })) as WorkoutLog[];
+    return { data: logs, error };
 };
 
 export const getPendingLogs = async (seasonId: string) => {

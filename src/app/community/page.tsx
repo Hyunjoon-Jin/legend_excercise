@@ -652,6 +652,8 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
 }) {
     const [showComments, setShowComments] = useState(false);
     const [comments, setComments] = useState<WorkoutLogComment[]>([]);
+    // DB에서 받아온 댓글 수로 초기화 — 다른 탭 갔다 와도 수가 유지됨
+    const [commentCount, setCommentCount] = useState(log.comment_count ?? 0);
     const [commentInput, setCommentInput] = useState("");
     const [submitting, setSubmitting] = useState(false);
     const [loadingComments, setLoadingComments] = useState(false);
@@ -659,13 +661,11 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
     const handleToggleComments = async () => {
         if (!showComments && comments.length === 0) {
             setLoadingComments(true);
-            const [{ data: cData }, { data: rData }] = await Promise.all([
-                getWorkoutLogComments(log.id),
-                // We could also fetch reactions for comments here, but for simplicity we'll just show comments first.
-                // Or let's just fetch comment reactions if we really wanted to.
-                Promise.resolve({ data: [] as any })
-            ]);
-            if (cData) setComments(cData);
+            const { data: cData } = await getWorkoutLogComments(log.id);
+            if (cData) {
+                setComments(cData);
+                setCommentCount(cData.length);
+            }
             setLoadingComments(false);
         }
         setShowComments(!showComments);
@@ -676,7 +676,10 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
         if (!text || submitting) return;
         setSubmitting(true);
         const { data } = await createWorkoutLogComment(log.id, userId, text, log.user_id);
-        if (data) setComments(prev => [...prev, data]);
+        if (data) {
+            setComments(prev => [...prev, data]);
+            setCommentCount(prev => prev + 1);
+        }
         setCommentInput("");
         setSubmitting(false);
     };
@@ -685,6 +688,7 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
         if (commentUserId !== userId && !isAdmin) return;
         await deleteWorkoutLogComment(commentId, commentUserId === userId ? userId : commentUserId);
         setComments(prev => prev.filter(c => c.id !== commentId));
+        setCommentCount(prev => Math.max(0, prev - 1));
     };
 
     const handleLogReaction = (emoji: string) => {
@@ -793,7 +797,7 @@ function CertFeedItem({ log, userId, isAdmin, reactionsMap, onReactionToggle }: 
                     className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1.5 rounded-md hover:bg-slate-50 transition-colors"
                 >
                     <MessageSquare size={14} />
-                    댓글 {comments.length > 0 ? comments.length : ''}
+                    댓글 {commentCount > 0 ? commentCount : ''}
                 </button>
             </div>
 
