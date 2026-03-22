@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getWorkoutLabel } from "@/lib/workout-types";
 
 interface DailyReportCardProps {
     date: Date;
@@ -70,10 +71,7 @@ export const DailyCertificationCard = React.forwardRef<HTMLDivElement, DailyRepo
                                                     </p>
                                                 </div>
                                                 <p className="text-xs text-indigo-600 font-semibold mt-0.5">
-                                                    {log.workout_type === 'gym' ? '헬스장' :
-                                                        log.workout_type === 'running' ? '러닝' :
-                                                            log.workout_type === 'walking' ? '걷기' :
-                                                                log.workout_type === 'yoga' ? '요가/필라테스' : '스포츠'}
+                                                    {getWorkoutLabel(log.workout_type)}
                                                 </p>
                                             </div>
                                         </div>

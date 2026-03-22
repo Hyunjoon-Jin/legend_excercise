@@ -1,5 +1,5 @@
 export type UserRole = 'admin' | 'member';
-export type WorkoutType = 'running' | 'walking' | 'gym' | 'yoga' | 'sports';
+export type WorkoutType = 'running' | 'walking' | 'gym' | 'yoga' | 'sports' | 'cycling' | 'swimming' | 'hiking' | 'climbing' | 'tennis' | 'badminton' | 'football' | 'basketball';
 export type LogStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Profile {
@@ -150,4 +150,57 @@ export interface Announcement {
     created_by: string | null;
     created_at: string;
     profiles?: { username: string; display_name?: string } | null;
+}
+
+// ─── Survey ───────────────────────────────────────────────────────────────────
+
+export type QuestionType = 'single_choice' | 'multiple_choice' | 'short_text' | 'long_text' | 'number';
+
+export interface Survey {
+    id: string;
+    user_id: string;
+    title: string;
+    description?: string;
+    is_active: boolean;
+    show_results_after_submit: boolean;
+    created_at: string;
+    profiles?: { username: string; display_name?: string } | null;
+}
+
+export interface SurveyQuestion {
+    id: string;
+    survey_id: string;
+    order_index: number;
+    type: QuestionType;
+    title: string;
+    description?: string | null;
+    required: boolean;
+    number_min?: number | null;
+    number_max?: number | null;
+    jump_to?: string | null; // null=next in order, 'end'=end survey, uuid=specific question
+    options?: SurveyOption[];
+}
+
+export interface SurveyOption {
+    id: string;
+    question_id: string;
+    order_index: number;
+    text: string;
+    jump_to?: string | null;
+}
+
+export interface SurveyResponse {
+    id: string;
+    survey_id: string;
+    user_id: string;
+    is_complete: boolean;
+    created_at: string;
+}
+
+export interface SurveyAnswer {
+    id: string;
+    response_id: string;
+    question_id: string;
+    answer_text?: string | null;
+    created_at: string;
 }

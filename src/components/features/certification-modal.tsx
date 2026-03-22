@@ -27,6 +27,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/lib/store/use-auth-store";
 import { submitWorkoutLog, getActiveSeason, notifyAdmins, updateWorkoutLog } from "@/lib/data";
 import type { WorkoutLog } from "@/types/database";
+import { WORKOUT_TYPE_OPTIONS } from "@/lib/workout-types";
 
 const certSchema = z.object({
     type: z.string().min(1, "운동 종류를 선택하세요."),
@@ -305,11 +306,9 @@ export function CertificationModal({ isOpen, onClose, onSuccess, editingLog }: C
                                     <SelectValue placeholder="선택" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="running">러닝</SelectItem>
-                                    <SelectItem value="gym">운동완료</SelectItem>
-                                    <SelectItem value="walking">걷기/산책</SelectItem>
-                                    <SelectItem value="yoga">요가/필라테스</SelectItem>
-                                    <SelectItem value="sports">기타 스포츠</SelectItem>
+                                    {WORKOUT_TYPE_OPTIONS.map(o => (
+                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>

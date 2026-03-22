@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement, AppNotification } from '@/types/database';
+import type { Profile, Season, WorkoutLog, WorkoutType, UserRole, Vote, MVPPr, ChatMessage, Post, PostComment, Announcement, AppNotification, Survey, SurveyQuestion, SurveyOption, SurveyAnswer } from '@/types/database';
 
 // --- Profiles ---
 export const getProfile = async (userId: string) => {
@@ -926,4 +926,198 @@ export const savePushSubscription = async (userId: string, subscription: any) =>
         p256dh: subscription.keys.p256dh,
         auth: subscription.keys.auth,
     });
+};
+
+// ─── Surveys ──────────────────────────────────────────────────────────────────
+
+export const getSurveys = async () => {
+    const { data, error } = await supabase
+        .from('surveys')
+        .select('*, profiles(username, display_name)')
+        .order('created_at', { ascending: false });
+    return { data: data as Survey[] | null, error };
+};
+
+interface SurveyWithQuestions extends Survey {
+    questions: SurveyQuestion[];
+}
+
+export const getSurveyWithQuestions = async (id: string) => {
+    const { data: survey, error } = await supabase
+        .from('surveys')
+        .select('*, profiles(username, display_name)')
+        .eq('id', id)
+        .single();
+    if (error) return { data: null, error };
+
+    const { data: questions } = await supabase
+        .from('survey_questions')
+        .select('*')
+        .eq('survey_id', id)
+        .order('order_index');
+
+    if (!questions || questions.length === 0) {
+        return { data: { ...survey, questions: [] } as SurveyWithQuestions, error: null };
+    }
+
+    const qIds = questions.map((q: any) => q.id);
+    const { data: options } = await supabase
+        .from('survey_options')
+        .select('*')
+        .in('question_id', qIds)
+        .order('order_index');
+
+    const optsByQ: Record<string, SurveyOption[]> = {};
+    (options || []).forEach((o: SurveyOption) => {
+        if (!optsByQ[o.question_id]) optsByQ[o.question_id] = [];
+        optsByQ[o.question_id].push(o);
+    });
+
+    const questionsWithOpts = questions.map((q: any) => ({
+        ...q,
+        options: optsByQ[q.id] || [],
+    }));
+
+    return { data: { ...survey, questions: questionsWithOpts } as SurveyWithQuestions, error: null };
+};
+
+interface QuestionInput {
+    type: string;
+    title: string;
+    description?: string;
+    required: boolean;
+    number_min?: number | null;
+    number_max?: number | null;
+    jump_to_index: number | null; // null=default, -1=end, N=index of target question
+    options: { text: string; jump_to_index: number | null }[];
+}
+
+export const createSurvey = async (
+    userId: string,
+    survey: { title: string; description?: string; show_results_after_submit: boolean },
+    questions: QuestionInput[]
+) => {
+    const { data: surveyData, error: surveyError } = await supabase
+        .from('surveys')
+        .insert([{ ...survey, user_id: userId, is_active: true }])
+        .select()
+        .single();
+    if (surveyError) return { data: null, error: surveyError };
+
+    // Insert questions to get real UUIDs
+    const questionIds: string[] = [];
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const { data: qData, error: qErr } = await supabase
+            .from('survey_questions')
+            .insert([{
+                survey_id: surveyData.id,
+                order_index: i,
+                type: q.type,
+                title: q.title,
+                description: q.description || null,
+                required: q.required,
+                number_min: q.number_min ?? null,
+                number_max: q.number_max ?? null,
+            }])
+            .select()
+            .single();
+        if (qErr) { console.error('question insert error:', qErr); questionIds.push(''); continue; }
+        questionIds.push(qData.id);
+    }
+
+    // Resolve jump_to indices → real UUIDs, then update + insert options
+    for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const qId = questionIds[i];
+        if (!qId) continue;
+
+        // Question-level jump_to
+        if (q.jump_to_index !== null) {
+            const jumpTo = q.jump_to_index === -1 ? 'end' : (questionIds[q.jump_to_index] || null);
+            if (jumpTo) await supabase.from('survey_questions').update({ jump_to: jumpTo }).eq('id', qId);
+        }
+
+        // Options with per-option jump_to
+        if (q.options.length > 0) {
+            await supabase.from('survey_options').insert(
+                q.options.map((opt, j) => {
+                    let jumpTo: string | null = null;
+                    if (opt.jump_to_index === -1) jumpTo = 'end';
+                    else if (opt.jump_to_index !== null) jumpTo = questionIds[opt.jump_to_index] || null;
+                    return { question_id: qId, order_index: j, text: opt.text, jump_to: jumpTo };
+                })
+            );
+        }
+    }
+
+    return { data: surveyData, error: null };
+};
+
+export const deleteSurvey = async (id: string) => {
+    const { error } = await supabase.from('surveys').delete().eq('id', id);
+    return { error };
+};
+
+export const toggleSurveyActive = async (id: string, isActive: boolean) => {
+    const { error } = await supabase.from('surveys').update({ is_active: isActive }).eq('id', id);
+    return { error };
+};
+
+export const getUserSurveyResponse = async (surveyId: string, userId: string) => {
+    const { data, error } = await supabase
+        .from('survey_responses')
+        .select('*')
+        .eq('survey_id', surveyId)
+        .eq('user_id', userId)
+        .eq('is_complete', true)
+        .maybeSingle();
+    return { data, error };
+};
+
+export const submitSurveyResponse = async (
+    surveyId: string,
+    userId: string,
+    answers: Record<string, string>
+) => {
+    const { data: responseData, error: responseError } = await supabase
+        .from('survey_responses')
+        .insert([{ survey_id: surveyId, user_id: userId, is_complete: true }])
+        .select()
+        .single();
+    if (responseError) return { data: null, error: responseError };
+
+    const answerRows = Object.entries(answers)
+        .filter(([, val]) => val !== '')
+        .map(([question_id, answer_text]) => ({
+            response_id: responseData.id,
+            question_id,
+            answer_text,
+        }));
+
+    if (answerRows.length > 0) {
+        await supabase.from('survey_answers').insert(answerRows);
+    }
+
+    return { data: responseData, error: null };
+};
+
+export const getSurveyAnswers = async (surveyId: string) => {
+    const { data: responses, error } = await supabase
+        .from('survey_responses')
+        .select('id')
+        .eq('survey_id', surveyId)
+        .eq('is_complete', true);
+    if (error) return { data: null, error };
+
+    const responseCount = responses?.length ?? 0;
+    if (responseCount === 0) return { data: { responseCount: 0, answers: [] as SurveyAnswer[] }, error: null };
+
+    const responseIds = responses!.map((r: any) => r.id);
+    const { data: answers } = await supabase
+        .from('survey_answers')
+        .select('*')
+        .in('response_id', responseIds);
+
+    return { data: { responseCount, answers: (answers || []) as SurveyAnswer[] }, error: null };
 };

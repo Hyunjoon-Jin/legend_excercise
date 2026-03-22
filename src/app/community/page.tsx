@@ -28,6 +28,8 @@ import {
     createWorkoutLogComment,
     deleteWorkoutLogComment,
 } from "@/lib/data";
+import { getWorkoutLabel } from "@/lib/workout-types";
+import { SurveyTab } from "@/components/features/survey/survey-tab";
 import type { ChatMessage, Post, PostComment, ReactionGroup, Announcement, WorkoutLog, WorkoutLogComment } from "@/types/database";
 import { ReactionBar } from "@/components/features/reaction-bar";
 import { cn } from "@/lib/utils";
@@ -70,14 +72,7 @@ function isVideoUrl(url: string) {
 }
 
 function getWorkoutBadge(type: WorkoutLog['workout_type']): string {
-    switch (type) {
-        case 'running': return '🏃 러닝';
-        case 'gym': return '💪 운동완료';
-        case 'walking': return '🚶 걷기/산책';
-        case 'yoga': return '🧘 요가/필라테스';
-        case 'sports': return '⚽ 기타스포츠';
-        default: return '🏋️ 운동';
-    }
+    return getWorkoutLabel(type);
 }
 
 // ─── Reaction helpers ────────────────────────────────────────────────────────
@@ -990,6 +985,7 @@ function CertFeedTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) 
 
 // ─── Board Tab ────────────────────────────────────────────────────────────────
 function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
+    const [boardSubTab, setBoardSubTab] = useState<'posts' | 'surveys'>('posts');
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -1093,6 +1089,40 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
 
     return (
         <div className="flex flex-col h-full">
+            {/* Sub-tab switcher */}
+            <div className="flex border-b border-slate-100 bg-white">
+                <button
+                    onClick={() => setBoardSubTab('posts')}
+                    className={cn(
+                        "flex-1 py-2.5 text-xs font-bold transition-colors",
+                        boardSubTab === 'posts'
+                            ? "text-amber-500 border-b-2 border-amber-400"
+                            : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    게시글
+                </button>
+                <button
+                    onClick={() => setBoardSubTab('surveys')}
+                    className={cn(
+                        "flex-1 py-2.5 text-xs font-bold transition-colors",
+                        boardSubTab === 'surveys'
+                            ? "text-indigo-500 border-b-2 border-indigo-400"
+                            : "text-slate-400 hover:text-slate-600"
+                    )}
+                >
+                    설문
+                </button>
+            </div>
+
+            {/* Survey sub-tab */}
+            {boardSubTab === 'surveys' && (
+                <SurveyTab userId={userId} isAdmin={isAdmin} boardChannelRef={boardChannelRef} />
+            )}
+
+            {/* Posts sub-tab */}
+            {boardSubTab === 'posts' && <>
+
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-white">
                 <span className="text-sm text-slate-500 font-medium">게시글 {posts.length}</span>
@@ -1281,6 +1311,7 @@ function BoardTab({ userId, isAdmin }: { userId: string; isAdmin: boolean }) {
                     </div>
                 </DialogContent>
             </Dialog>
+            </>}
         </div>
     );
 }

@@ -29,6 +29,7 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { getActiveSeason, getAllSeasons, getRankings, getWorkoutLogs, getNotifications, getVotes, getMVPPrs, deleteWorkoutLog, createNotification, getLatestAnnouncement, notifyAdmins, resubmitWorkoutLog } from "@/lib/data";
 import { Profile, Season, WorkoutLog, AppNotification, MVPPr } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { getWorkoutLabel } from "@/lib/workout-types";
 import { format, startOfWeek, endOfWeek, isWithinInterval, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -583,11 +584,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded-md">
-                          {log.workout_type === 'running' ? '🏃 러닝'
-                            : log.workout_type === 'gym' ? '💪 운동완료'
-                              : log.workout_type === 'walking' ? '🚶 걷기/산책'
-                                : log.workout_type === 'yoga' ? '🧘 요가/필라테스'
-                                  : '⚽ 기타스포츠'}
+                          {getWorkoutLabel(log.workout_type)}
                         </span>
                         <span className="text-[10px] text-slate-400">{log.workout_date}</span>
                       </div>

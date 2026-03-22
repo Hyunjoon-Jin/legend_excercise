@@ -20,6 +20,7 @@ import { BottomNav } from "@/components/layout/bottom-nav";
 import { WorkoutLog, Season } from "@/types/database";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
+import { getWorkoutLabel } from "@/lib/workout-types";
 
 // ─── 주차 계산 헬퍼 ──────────────────────────────────────────────────────────
 function getWeekMonday(date: Date): Date {
@@ -570,9 +571,7 @@ export default function ProfilePage() {
                                                 </div>
                                                 <div>
                                                     <p className="font-black text-primary text-sm">
-                                                        {log.workout_type === "gym" ? "💪 운동완료" :
-                                                            log.workout_type === "running" ? "🏃 러닝" :
-                                                                log.workout_type === "walking" ? "🚶 걷기" : "🔥 스포츠"}
+                                                        {getWorkoutLabel(log.workout_type)}
                                                     </p>
                                                     <p className="text-[11px] text-slate-400 font-bold">
                                                         {format(new Date(log.workout_date), "yyyy.MM.dd (EEE)", { locale: ko })}

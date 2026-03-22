@@ -22,6 +22,7 @@ import {
 import { ko } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { getWorkoutLogs, getActiveSeason } from "@/lib/data";
+import { getWorkoutLabel } from "@/lib/workout-types";
 import { WorkoutLog } from "@/types/database";
 import { BottomNav } from "@/components/layout/bottom-nav";
 
@@ -188,10 +189,7 @@ export default function CalendarPage() {
                                         </div>
                                         <div>
                                             <p className="font-bold text-primary">
-                                                {log.workout_type === 'gym' ? '운동완료' :
-                                                    log.workout_type === 'running' ? '러닝' :
-                                                        log.workout_type === 'walking' ? '걷기' :
-                                                            log.workout_type === 'yoga' ? '요가' : '스포츠'}
+                                                {getWorkoutLabel(log.workout_type)}
                                             </p>
                                             <p className="text-xs text-slate-400">운동완료</p>
                                         </div>
